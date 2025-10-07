@@ -1,31 +1,69 @@
-public async Task<IActionResult> GetTotalCostOfOwnershipByPlantId(GetTotalCostOfOwnershipRequestByplantId request)
-{
-    var totalCostOfOwnershipResult = await _currentServices.GetTotalCostOfOwnershipByPlantIdAsync(request);
-    if (totalCostOfOwnershipResult! == null) return NoContent();
-    else return Ok(totalCostOfOwnershipResult);
-}
-public class GetTotalCostOfOwnershipRequestByplantId
-{
-    public int plantId { get; set; }
-    public string? startDate { get; set; }
-    public string? endDate { get; set; }
-    public int? affiliateId { get; set; }
-}
-public class GetTotalCostOfOwnershipResponse
-{
-    public decimal maintenance { get; set; }
-    public decimal disposal { get; set; }
-    public decimal acquisition { get; set; }
-    public decimal operation { get; set; }
-    public decimal productionLoss { get; set; }
-    public decimal total { get; set; }
-    public decimal maintenancePercent { get; set; }
-    public decimal disposalPercent { get; set; }
-    public decimal acquisitionPercent { get; set; }
-    public decimal operationPercent { get; set; }
-    public decimal productionLossPercent { get; set; }
-    public decimal totalAssetOperation { get; set; }
+ [Fact]
+    public async Task GetTotalCostOfOwnershipByPlantId_ReturnsOk_WhenDataExists()
+    {
+        // Arrange
+        var request = new GetTotalCostOfOwnershipRequestByplantId
+        {
+            plantId = 10,
+            startDate = "2025-01-01",
+            endDate = "2025-01-31",
+            affiliateId = 5
+        };
 
+        var expectedResponse = new GetTotalCostOfOwnershipResponse
+        {
+            maintenance = 1200,
+            operation = 800,
+            total = 2000
+        };
 
-}
-Task<GetTotalCostOfOwnershipResponse> GetTotalCostOfOwnershipByPlantIdAsync(GetTotalCostOfOwnershipRequestByplantId request);
+        _currentServiceMock
+            .Setup(s => s.GetTotalCostOfOwnershipByPlantIdAsync(It.IsAny<GetTotalCostOfOwnershipRequestByplantId>()))
+            .ReturnsAsync(expectedResponse);
+
+        // Act
+        var result = await _controller.GetTotalCostOfOwnershipByPlantId(request);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var actualResponse = Assert.IsType<GetTotalCostOfOwnershipResponse>(okResult.Value);
+        Assert.Equal(expectedResponse.total, actualResponse.total);
+    }
+
+    // ✅ Test 2: Should return NoContent when service returns null
+    [Fact]
+    public async Task GetTotalCostOfOwnershipByPlantId_ReturnsNoContent_WhenResponseIsNull()
+    {
+        // Arrange
+        var request = new GetTotalCostOfOwnershipRequestByplantId
+        {
+            plantId = 20,
+            startDate = "2025-01-01",
+            endDate = "2025-01-31"
+        };
+
+        _currentServiceMock
+            .Setup(s => s.GetTotalCostOfOwnershipByPlantIdAsync(It.IsAny<GetTotalCostOfOwnershipRequestByplantId>()))
+            .ReturnsAsync((GetTotalCostOfOwnershipResponse?)null);
+
+        // Act
+        var result = await _controller.GetTotalCostOfOwnershipByPlantId(request);
+
+        // Assert
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    // ✅ Optional Test 3: Handle exceptions gracefully (for full coverage)
+    [Fact]
+    public async Task GetTotalCostOfOwnershipByPlantId_ThrowsException_ShouldPropagate()
+    {
+        // Arrange
+        var request = new GetTotalCostOfOwnershipRequestByplantId { plantId = 30 };
+
+        _currentServiceMock
+            .Setup(s => s.GetTotalCostOfOwnershipByPlantIdAsync(It.IsAny<GetTotalCostOfOwnershipRequestByplantId>()))
+            .ThrowsAsync(new System.Exception("Database error"));
+
+        // Act & Assert
+        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetTotalCostOfOwnershipByPlantId(request));
+    }
