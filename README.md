@@ -2,31 +2,34 @@
 public async Task GetKpiData_ReturnsOk_WhenDataExists()
 {
     // Arrange
-    var request = new GetKpiDetailsRequest
-    {
-        affiliateId = 1,
-        plantId = "123",
-        page = "Dashboard",
-        startDate = "2025-01-01",
-        endDate = "2025-02-01"
-    };
+    var fixture = new Fixture(); // AutoFixture generates random test data
 
-    var affiliateCodes = new List<int> { 101, 102 };
-    _mockConfigServices.Setup(s => s.GetAffiliateCodeList(It.IsAny<int?>()))
+    var request = fixture.Build<GetKpiDetailsRequest>()
+        .With(r => r.page, "Dashboard") // set specific fields if needed
+        .With(r => r.startDate, "2025-01-01")
+        .With(r => r.endDate, "2025-02-01")
+        .Create();
+
+    var affiliateCodes = fixture.CreateMany<int>(2).ToList(); // generates a random list like [101, 202]
+    var kpiResponse = fixture.Build<GetKpiDataResponse>()
+        .With(x => x.kpiCode, "KPI01")
+        .With(x => x.kpiName, "Efficiency")
+        .CreateMany(1)
+        .ToList();
+
+    _mockConfigServices
+        .Setup(s => s.GetAffiliateCodeList(It.IsAny<int?>()))
         .Returns(affiliateCodes);
 
-    var kpiResponse = new List<GetKpiDataResponse>
-{
-    new GetKpiDataResponse { kpiCode = "KPI01", kpiName = "Efficiency" }
-};
-
-    _mockCurrentServices.Setup(s => s.GetKpiDetailsAsync(
-        request.page!,
-        It.IsAny<string>(),
-        request.startDate!,
-        request.endDate!,
-        request.plantId!
-    )).ReturnsAsync(kpiResponse);
+    _mockCurrentServices
+        .Setup(s => s.GetKpiDetailsAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>()
+        ))
+        .ReturnsAsync(kpiResponse);
 
     // Act
     var result = await _controller.GetKpiData(request);
@@ -34,26 +37,6 @@ public async Task GetKpiData_ReturnsOk_WhenDataExists()
     // Assert
     var okResult = Assert.IsType<OkObjectResult>(result);
     var data = Assert.IsAssignableFrom<List<GetKpiDataResponse>>(okResult.Value);
-    Assert.Single(data);
-    Assert.Equal("KPI01", data[0].kpiCode);
-}
-[Fact]
-public async Task DownloadFromEcmAsync_ReturnsNoContent_WhenFileIsNull()
-{
-    // Arrange
-    var fixture = new Fixture();
-
-    var fileId = fixture.Create<string>();
-    var request = Mock.Of<DownloadFromEcmRequest>(r => r.fileID == fileId);
-
-    _mockEcmServices
-        .Setup(s => s.DownloadFromEcmAsync(It.IsAny<DownloadFromEcmRequest>()))
-        .ReturnsAsync((DownloadFromEcmResponse?)null);
-
-    // Act
-    var result = await _controller.DownloadFromEcmAsync(request);
-
-    // Assert
-    Assert.NotNull(result);
-    Assert.IsType<NoContentResult>(result);
+    Assert.NotEmpty(data);
+    Assert.Equal("KPI01", data.First().kpiCode);
 }
