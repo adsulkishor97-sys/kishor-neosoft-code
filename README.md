@@ -1,42 +1,46 @@
 [Fact]
-public async Task GetTotalCostOfOwnershipByPlantId_ReturnsOk_WhenDataExists()
+public async Task GetAssetDistribution_ReturnsOk_WhenDataExists()
 {
     // Arrange
     var fixture = new Fixture();
 
     // Generate request dynamically
-    var request = fixture.Create<GetTotalCostOfOwnershipRequestByplantId>();
+    var request = fixture.Build<GetAssetDistributionRequest>()
+                         .With(r => r.page, "global") // required property
+                         .Create();
+
+    // Generate affiliate codes dynamically
+    var affiliateCodes = fixture.CreateMany<int>(2).ToList();
+    _mockConfigServices.Setup(x => x.GetAffiliateCodeList(request.affiliateId))
+                       .Returns(affiliateCodes);
 
     // Generate expected response dynamically
-    var expectedResponse = fixture.Build<GetTotalCostOfOwnershipResponse>()
-                                  .With(r => r.total, fixture.Create<int>() + fixture.Create<int>()) // ensure total is positive
-                                  .Create();
+    var expectedResult = fixture.CreateMany<AssetGroupedData>(2).ToList();
 
     _mockCurrentServices
-        .Setup(s => s.GetTotalCostOfOwnershipByPlantIdAsync(It.IsAny<GetTotalCostOfOwnershipRequestByplantId>()))
-        .ReturnsAsync(expectedResponse);
+        .Setup(x => x.GetAssetDistributionAsync(It.IsAny<GetAssetDistributionRequest>(), It.IsAny<string>()))
+        .ReturnsAsync(expectedResult);
 
     // Act
-    var result = await _controller.GetTotalCostOfOwnershipByPlantId(request);
+    var result = await _controller.GetAssetDistribution(request);
 
     // Assert
     var okResult = Assert.IsType<OkObjectResult>(result);
-    var actualResponse = Assert.IsType<GetTotalCostOfOwnershipResponse>(okResult.Value);
-    Assert.Equal(expectedResponse.total, actualResponse.total);
+    var response = Assert.IsAssignableFrom<List<AssetGroupedData>>(okResult.Value);
+    Assert.Equal(expectedResult.Count, response.Count);
 }
 [Fact]
-public async Task GetTotalCostOfOwnershipByPlantId_ThrowsException_ShouldPropagate()
+public async Task GetAssetDistribution_ThrowsException_ShouldPropagate()
 {
     // Arrange
     var fixture = new Fixture();
 
     // Generate request dynamically
-    var request = fixture.Create<GetTotalCostOfOwnershipRequestByplantId>();
+    var request = fixture.Create<GetAssetDistributionRequest>();
 
-    _mockCurrentServices
-        .Setup(s => s.GetTotalCostOfOwnershipByPlantIdAsync(It.IsAny<GetTotalCostOfOwnershipRequestByplantId>()))
-        .ThrowsAsync(new Exception("Database error"));
+    _mockConfigServices.Setup(x => x.GetAffiliateCodeList(request.affiliateId))
+                       .Throws(new Exception("DB connection failed"));
 
     // Act & Assert
-    await Assert.ThrowsAsync<Exception>(() => _controller.GetTotalCostOfOwnershipByPlantId(request));
+    await Assert.ThrowsAsync<Exception>(() => _controller.GetAssetDistribution(request));
 }
