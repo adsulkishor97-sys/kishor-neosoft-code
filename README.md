@@ -1,23 +1,36 @@
-public async Task<IActionResult> GetKPITooltip(KpiInputRequest request)
-{
-    var getAffiliateCodeList = _configServices.GetAffiliateCodeList(request.affiliateId);
-    GetCaseHierarchyRequest affiliateRequest = new()
+    [Fact]
+    public async Task GetKPITooltip_ReturnsOk_WhenDataExists()
     {
-        bigDataAffiliateIdList = $"{string.Join(",", getAffiliateCodeList.Select(n => $"'{n}'"))}"
-    };
-    if (affiliateRequest.bigDataAffiliateIdList == null) return Unauthorized();
-    var KpiToolTipResult = await _currentServices.GetKPITooltipAsyncNew(request, affiliateRequest.bigDataAffiliateIdList, request.startDate!, request.endDate!);
-    if (KpiToolTipResult! == null) return NoContent();
-    else return Ok(KpiToolTipResult);
-}
-public class KpiInputRequest
-{
-    public string? kpiCode { get; set; }
-    public string? page { get; set; }
-    public int? affiliateId { get; set; }
-    public int? plantId { get; set; }
+        // Arrange
+        var request = new KpiInputRequest
+        {
+            affiliateId = 1,
+            startDate = "2025-01-01",
+            endDate = "2025-01-31"
+        };
 
+        var affiliateCodes = new List<int> { 101, 102 };
+        _configServiceMock.Setup(x => x.GetAffiliateCodeList(It.IsAny<int?>()))
+            .Returns(affiliateCodes);
 
-    public string? startDate { get; set; }
-    public string? endDate { get; set; }
-}
+        var expectedResponse = new KpiTooltipResponse
+        {
+            labels = new List<Label> { new Label { title = "Sample", uom = "kg", value = "10" } },
+            kpiTooltipDetails = new KpiTooltipDetails()
+        };
+
+        _currentServiceMock.Setup(x => x.GetKPITooltipAsyncNew(
+            It.IsAny<KpiInputRequest>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>()
+        )).ReturnsAsync(expectedResponse);
+
+        // Act
+        var result = await _controller.GetKPITooltip(request);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var value = Assert.IsType<KpiTooltipResponse>(okResult.Value);
+        Assert.NotNull(value.labels);
+    }
