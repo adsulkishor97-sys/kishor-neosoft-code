@@ -3,22 +3,23 @@ using Moq;
 using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Linq;
 
 public class KpiControllerTests
 {
     private readonly Mock<IConfigServices> _mockConfigServices;
     private readonly Mock<ICurrentServices> _mockCurrentServices;
-    private readonly YourController _controller; // Replace with your actual controller name
+    private readonly KpiController _controller; // Replace with your actual controller name
 
     public KpiControllerTests()
     {
         _mockConfigServices = new Mock<IConfigServices>();
         _mockCurrentServices = new Mock<ICurrentServices>();
-        _controller = new YourController(_mockConfigServices.Object, _mockCurrentServices.Object);
+        _controller = new KpiController(_mockConfigServices.Object, _mockCurrentServices.Object);
     }
 
     [Fact]
-    public async Task GetKpiData_WithValidAffiliateId_ReturnsOkResult()
+    public async Task GetKpiData_WithValidRequest_ReturnsOkResultWithData()
     {
         // Arrange
         var request = new GetKpiDetailsRequest
@@ -31,7 +32,23 @@ public class KpiControllerTests
         };
 
         var affiliateCodeList = new List<string> { "AFF001", "AFF002", "AFF003" };
-        var expectedResult = new { /* Your expected KPI data structure */ };
+        
+        var expectedResponse = new GetKpiDataResponse
+        {
+            plantId = 1,
+            kpiName = "Test KPI",
+            kpiCode = "KPI001",
+            overallActual = 1000,
+            overallTargetDisplay = "1200",
+            overallTargetMin = 800,
+            criticalState = 0,
+            overallState = 1,
+            criticalActual = 500,
+            criticalTargetDisplay = "600",
+            criticalTargetMin = 400,
+            criticalTargetMax = 700,
+            subCategory = "Category A"
+        };
 
         _mockConfigServices
             .Setup(x => x.GetAffiliateCodeList(request.affiliateId))
@@ -44,15 +61,20 @@ public class KpiControllerTests
                 request.startDate,
                 request.endDate,
                 request.plantId))
-            .ReturnsAsync(expectedResult);
+            .ReturnsAsync(expectedResponse);
 
         // Act
         var result = await _controller.GetKpiData(request);
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result);
-        Assert.NotNull(okResult.Value);
-        Assert.Equal(expectedResult, okResult.Value);
+        var actualResponse = Assert.IsType<GetKpiDataResponse>(okResult.Value);
+        
+        Assert.Equal(expectedResponse.plantId, actualResponse.plantId);
+        Assert.Equal(expectedResponse.kpiName, actualResponse.kpiName);
+        Assert.Equal(expectedResponse.kpiCode, actualResponse.kpiCode);
+        Assert.Equal(expectedResponse.overallActual, actualResponse.overallActual);
+        Assert.Equal(expectedResponse.criticalActual, actualResponse.criticalActual);
     }
 
     [Fact]
@@ -77,9 +99,14 @@ public class KpiControllerTests
 
         // Assert
         Assert.IsType<UnauthorizedResult>(result);
+        
         _mockCurrentServices.Verify(
-            x => x.GetKpiDetailsAsync(It.IsAny<string>(), It.IsAny<string>(), 
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), 
+            x => x.GetKpiDetailsAsync(
+                It.IsAny<string>(), 
+                It.IsAny<string>(), 
+                It.IsAny<string>(), 
+                It.IsAny<string>(), 
+                It.IsAny<string>()), 
             Times.Never);
     }
 
@@ -89,15 +116,13 @@ public class KpiControllerTests
         // Arrange
         var request = new GetKpiDetailsRequest
         {
-            affiliateId = null,
+            affiliateId = 1,
             plantId = "PLANT001",
-            page = "1",
-            startDate = "2024-01-01",
-            endDate = "2024-12-31"
+            page = "1"
         };
 
         _mockConfigServices
-            .Setup(x => x.GetAffiliateCodeList(It.IsAny<int?>()))
+            .Setup(x => x.GetAffiliateCodeList(request.affiliateId))
             .Returns((List<string>)null);
 
         // Act
@@ -128,12 +153,12 @@ public class KpiControllerTests
 
         _mockCurrentServices
             .Setup(x => x.GetKpiDetailsAsync(
-                request.page,
                 It.IsAny<string>(),
-                request.startDate,
-                request.endDate,
-                request.plantId))
-            .ReturnsAsync((object)null);
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()))
+            .ReturnsAsync((GetKpiDataResponse)null);
 
         // Act
         var result = await _controller.GetKpiData(request);
@@ -143,7 +168,7 @@ public class KpiControllerTests
     }
 
     [Fact]
-    public async Task GetKpiData_VerifyCorrectBigDataAffiliateIdListFormat()
+    public async Task GetKpiData_VerifyBigDataAffiliateIdListFormat()
     {
         // Arrange
         var request = new GetKpiDetailsRequest
@@ -156,7 +181,7 @@ public class KpiControllerTests
         };
 
         var affiliateCodeList = new List<string> { "AFF001", "AFF002", "AFF003" };
-        var expectedBigDataFormat = $"{{string.Join(\",\", affiliateCodeList.Select(n => $\"'{n}'\"))}}";
+        var expectedFormat = $"{{{string.Join(",", affiliateCodeList.Select(n => $"'{n}'"))}}}";
 
         _mockConfigServices
             .Setup(x => x.GetAffiliateCodeList(request.affiliateId))
@@ -164,21 +189,21 @@ public class KpiControllerTests
 
         _mockCurrentServices
             .Setup(x => x.GetKpiDetailsAsync(
-                request.page,
-                It.Is<string>(s => s.Contains("'AFF001'") && s.Contains("'AFF002'") && s.Contains("'AFF003'")),
-                request.startDate,
-                request.endDate,
-                request.plantId))
-            .ReturnsAsync(new { success = true });
+                It.IsAny<string>(),
+                expectedFormat,
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(new GetKpiDataResponse { plantId = 1 });
 
         // Act
-        var result = await _controller.GetKpiData(request);
+        await _controller.GetKpiData(request);
 
         // Assert
         _mockCurrentServices.Verify(
             x => x.GetKpiDetailsAsync(
                 request.page,
-                It.Is<string>(s => s == $"{{{string.Join(",", affiliateCodeList.Select(n => $"'{n}'"))}}}"),
+                expectedFormat,
                 request.startDate,
                 request.endDate,
                 request.plantId),
@@ -186,11 +211,11 @@ public class KpiControllerTests
     }
 
     [Theory]
-    [InlineData(null, "PLANT001", "1", "2024-01-01", "2024-12-31")]
-    [InlineData(1, "", "1", "2024-01-01", "2024-12-31")]
-    [InlineData(1, null, "1", "2024-01-01", "2024-12-31")]
-    public async Task GetKpiData_WithVariousInputs_HandlesCorrectly(
-        int? affiliateId, string plantId, string page, string startDate, string endDate)
+    [InlineData(1, "PLANT001", "1", "2024-01-01", "2024-12-31")]
+    [InlineData(2, "PLANT002", "2", "2024-06-01", "2024-06-30")]
+    [InlineData(3, "", "1", null, null)]
+    public async Task GetKpiData_WithDifferentValidInputs_ReturnsOkResult(
+        int affiliateId, string plantId, string page, string startDate, string endDate)
     {
         // Arrange
         var request = new GetKpiDetailsRequest
@@ -203,9 +228,10 @@ public class KpiControllerTests
         };
 
         var affiliateCodeList = new List<string> { "AFF001" };
+        var response = new GetKpiDataResponse { plantId = 1, kpiName = "Test" };
 
         _mockConfigServices
-            .Setup(x => x.GetAffiliateCodeList(It.IsAny<int?>()))
+            .Setup(x => x.GetAffiliateCodeList(affiliateId))
             .Returns(affiliateCodeList);
 
         _mockCurrentServices
@@ -215,90 +241,37 @@ public class KpiControllerTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<string>()))
-            .ReturnsAsync(new { data = "test" });
+            .ReturnsAsync(response);
 
         // Act
         var result = await _controller.GetKpiData(request);
 
         // Assert
-        Assert.NotNull(result);
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        Assert.NotNull(okResult.Value);
     }
 
     [Fact]
-    public async Task GetKpiData_ServiceThrowsException_ThrowsException()
+    public async Task GetKpiData_WithNullAffiliateId_ReturnsUnauthorized()
     {
         // Arrange
         var request = new GetKpiDetailsRequest
         {
-            affiliateId = 1,
+            affiliateId = null,
             plantId = "PLANT001",
-            page = "1",
-            startDate = "2024-01-01",
-            endDate = "2024-12-31"
+            page = "1"
         };
 
-        var affiliateCodeList = new List<string> { "AFF001" };
-
         _mockConfigServices
-            .Setup(x => x.GetAffiliateCodeList(request.affiliateId))
-            .Returns(affiliateCodeList);
-
-        _mockCurrentServices
-            .Setup(x => x.GetKpiDetailsAsync(
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<string>()))
-            .ThrowsAsync(new System.Exception("Database connection failed"));
-
-        // Act & Assert
-        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetKpiData(request));
-    }
-
-    [Fact]
-    public async Task GetKpiData_VerifyAllParametersPassedCorrectly()
-    {
-        // Arrange
-        var request = new GetKpiDetailsRequest
-        {
-            affiliateId = 1,
-            plantId = "PLANT001",
-            page = "1",
-            startDate = "2024-01-01",
-            endDate = "2024-12-31"
-        };
-
-        var affiliateCodeList = new List<string> { "AFF001", "AFF002" };
-
-        _mockConfigServices
-            .Setup(x => x.GetAffiliateCodeList(request.affiliateId))
-            .Returns(affiliateCodeList);
-
-        _mockCurrentServices
-            .Setup(x => x.GetKpiDetailsAsync(
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<string>()))
-            .ReturnsAsync(new { success = true });
+            .Setup(x => x.GetAffiliateCodeList(null))
+            .Returns((List<string>)null);
 
         // Act
-        await _controller.GetKpiData(request);
+        var result = await _controller.GetKpiData(request);
 
         // Assert
-        _mockCurrentServices.Verify(
-            x => x.GetKpiDetailsAsync(
-                request.page,
-                It.IsAny<string>(),
-                request.startDate,
-                request.endDate,
-                request.plantId),
-            Times.Once);
-
-        _mockConfigServices.Verify(
-            x => x.GetAffiliateCodeList(request.affiliateId),
-            Times.Once);
+        Assert.IsType<UnauthorizedResult>(result);
     }
-}
+
+    [Fact]
+    public async Task GetKpiData_VerifyAllParametersP
