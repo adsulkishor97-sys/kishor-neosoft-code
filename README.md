@@ -1,44 +1,42 @@
 [Fact]
-public async Task GetTotalCostOfOwnership_ReturnsOk_WhenDataExists()
+public async Task GetTotalCostOfOwnershipByPlantId_ReturnsOk_WhenDataExists()
 {
     // Arrange
     var fixture = new Fixture();
 
     // Generate request dynamically
-    var request = fixture.Build<GetTotalCostOfOwnershipRequest>()
-                         .With(r => r.page, "Dashboard") // keep page if required
-                         .Create();
+    var request = fixture.Create<GetTotalCostOfOwnershipRequestByplantId>();
 
     // Generate expected response dynamically
     var expectedResponse = fixture.Build<GetTotalCostOfOwnershipResponse>()
-                                  .With(r => r.total, fixture.Create<int>() + fixture.Create<int>()) // ensure total != 0
+                                  .With(r => r.total, fixture.Create<int>() + fixture.Create<int>()) // ensure total is positive
                                   .Create();
 
     _mockCurrentServices
-        .Setup(s => s.GetTotalCostOfOwnershipAsync(It.IsAny<GetTotalCostOfOwnershipRequest>()))
+        .Setup(s => s.GetTotalCostOfOwnershipByPlantIdAsync(It.IsAny<GetTotalCostOfOwnershipRequestByplantId>()))
         .ReturnsAsync(expectedResponse);
 
     // Act
-    var result = await _controller.GetTotalCostOfOwnership(request);
+    var result = await _controller.GetTotalCostOfOwnershipByPlantId(request);
 
     // Assert
     var okResult = Assert.IsType<OkObjectResult>(result);
-    var actual = Assert.IsType<GetTotalCostOfOwnershipResponse>(okResult.Value);
-    Assert.Equal(expectedResponse.total, actual.total);
+    var actualResponse = Assert.IsType<GetTotalCostOfOwnershipResponse>(okResult.Value);
+    Assert.Equal(expectedResponse.total, actualResponse.total);
 }
 [Fact]
-public async Task GetTotalCostOfOwnership_ThrowsException_Returns500()
+public async Task GetTotalCostOfOwnershipByPlantId_ThrowsException_ShouldPropagate()
 {
     // Arrange
     var fixture = new Fixture();
 
     // Generate request dynamically
-    var request = fixture.Create<GetTotalCostOfOwnershipRequest>();
+    var request = fixture.Create<GetTotalCostOfOwnershipRequestByplantId>();
 
     _mockCurrentServices
-        .Setup(s => s.GetTotalCostOfOwnershipAsync(It.IsAny<GetTotalCostOfOwnershipRequest>()))
+        .Setup(s => s.GetTotalCostOfOwnershipByPlantIdAsync(It.IsAny<GetTotalCostOfOwnershipRequestByplantId>()))
         .ThrowsAsync(new Exception("Database error"));
 
     // Act & Assert
-    await Assert.ThrowsAsync<Exception>(() => _controller.GetTotalCostOfOwnership(request));
+    await Assert.ThrowsAsync<Exception>(() => _controller.GetTotalCostOfOwnershipByPlantId(request));
 }
