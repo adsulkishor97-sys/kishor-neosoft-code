@@ -1,26 +1,58 @@
-[Fact]
-public async Task GetKPITooltip_ReturnsOk_WhenDataExists()
+public async Task GetKpiData_ReturnsOk_WhenDataExists()
 {
     // Arrange
-    var request = _fixture.Create<KpiInputRequest>();
-    var affiliateCodes = _fixture.CreateMany<int>(3).ToList();
+    var request = new GetKpiDetailsRequest
+    {
+        affiliateId = 1,
+        plantId = "123",
+        page = "Dashboard",
+        startDate = "2025-01-01",
+        endDate = "2025-02-01"
+    };
 
+    var affiliateCodes = new List<int> { 101, 102 };
     _mockConfigServices.Setup(s => s.GetAffiliateCodeList(It.IsAny<int?>()))
         .Returns(affiliateCodes);
 
-    var mockResponse = _fixture.Build<KpiTooltipResponse>()
-                               .With(x => x.labels, _fixture.CreateMany<Label>(2).ToList())
-                               .Create();
+    var kpiResponse = new List<GetKpiDataResponse>
+{
+    new GetKpiDataResponse { kpiCode = "KPI01", kpiName = "Efficiency" }
+};
 
-    _mockCurrentServices.Setup(s => s.GetKPITooltipAsyncNew(
-        It.IsAny<KpiInputRequest>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
-        .ReturnsAsync(mockResponse);
+    _mockCurrentServices.Setup(s => s.GetKpiDetailsAsync(
+        request.page!,
+        It.IsAny<string>(),
+        request.startDate!,
+        request.endDate!,
+        request.plantId!
+    )).ReturnsAsync(kpiResponse);
 
     // Act
-    var result = await _controller.GetKPITooltip(request);
+    var result = await _controller.GetKpiData(request);
 
     // Assert
     var okResult = Assert.IsType<OkObjectResult>(result);
-    var value = Assert.IsType<KpiTooltipResponse>(okResult.Value);
-    Assert.NotEmpty(value.labels);
+    var data = Assert.IsAssignableFrom<List<GetKpiDataResponse>>(okResult.Value);
+    Assert.Single(data);
+    Assert.Equal("KPI01", data[0].kpiCode);
+}
+[Fact]
+public async Task DownloadFromEcmAsync_ReturnsNoContent_WhenFileIsNull()
+{
+    // Arrange
+    var fixture = new Fixture();
+
+    var fileId = fixture.Create<string>();
+    var request = Mock.Of<DownloadFromEcmRequest>(r => r.fileID == fileId);
+
+    _mockEcmServices
+        .Setup(s => s.DownloadFromEcmAsync(It.IsAny<DownloadFromEcmRequest>()))
+        .ReturnsAsync((DownloadFromEcmResponse?)null);
+
+    // Act
+    var result = await _controller.DownloadFromEcmAsync(request);
+
+    // Assert
+    Assert.NotNull(result);
+    Assert.IsType<NoContentResult>(result);
 }
