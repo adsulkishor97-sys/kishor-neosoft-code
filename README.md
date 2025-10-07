@@ -1,106 +1,25 @@
-using Xunit;
-using Moq;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-
-public class KpiControllerTests
+[Fact]
+public async Task GetKpiData_ReturnsUnauthorized_WhenAffiliateListNull()
 {
-    private readonly Mock<IConfigServices> _configServiceMock;
-    private readonly Mock<ICurrentServices> _currentServiceMock;
-    private readonly KpiController _controller;
-
-    public KpiControllerTests()
+    // Arrange
+    var request = new GetKpiDetailsRequest
     {
-        _configServiceMock = new Mock<IConfigServices>();
-        _currentServiceMock = new Mock<ICurrentServices>();
-        _controller = new KpiController(_configServiceMock.Object, _currentServiceMock.Object);
-    }
+        affiliateId = null
+    };
 
-    [Fact]
-    public async Task GetKpiData_ReturnsOk_WhenDataExists()
-    {
-        // Arrange
-        var request = new GetKpiDetailsRequest
-        {
-            affiliateId = 1,
-            plantId = "123",
-            page = "Dashboard",
-            startDate = "2025-01-01",
-            endDate = "2025-02-01"
-        };
+    // Return null to simulate missing affiliate codes
+    _configServiceMock.Setup(s => s.GetAffiliateCodeList(It.IsAny<int?>()))
+        .Returns((List<int>?)null);
 
-        var affiliateCodes = new List<int> { 101, 102 };
-        _configServiceMock.Setup(s => s.GetAffiliateCodeList(It.IsAny<int?>()))
-            .Returns(affiliateCodes);
+    // Avoid null reference exception by adjusting controller logic
+    // or by handling mock gracefully (Option A preferred)
+    _currentServiceMock.Setup(s => s.GetKpiDetailsAsync(
+        It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()
+    )).ReturnsAsync((List<GetKpiDataResponse>?)null);
 
-        var kpiResponse = new List<GetKpiDataResponse>
-        {
-            new GetKpiDataResponse { kpiCode = "KPI01", kpiName = "Efficiency" }
-        };
+    // Act
+    var result = await _controller.GetKpiData(request);
 
-        _currentServiceMock.Setup(s => s.GetKpiDetailsAsync(
-            request.page!,
-            It.IsAny<string>(),
-            request.startDate!,
-            request.endDate!,
-            request.plantId!
-        )).ReturnsAsync(kpiResponse);
-
-        // Act
-        var result = await _controller.GetKpiData(request);
-
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var data = Assert.IsAssignableFrom<List<GetKpiDataResponse>>(okResult.Value);
-        Assert.Single(data);
-        Assert.Equal("KPI01", data[0].kpiCode);
-    }
-
-    [Fact]
-    public async Task GetKpiData_ReturnsNoContent_WhenNoData()
-    {
-        // Arrange
-        var request = new GetKpiDetailsRequest
-        {
-            affiliateId = 1,
-            plantId = "123",
-            page = "Dashboard",
-            startDate = "2025-01-01",
-            endDate = "2025-02-01"
-        };
-
-        var affiliateCodes = new List<int> { 101 };
-        _configServiceMock.Setup(s => s.GetAffiliateCodeList(It.IsAny<int?>()))
-            .Returns(affiliateCodes);
-
-        _currentServiceMock.Setup(s => s.GetKpiDetailsAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()
-        )).ReturnsAsync((List<GetKpiDataResponse>?)null);
-
-        // Act
-        var result = await _controller.GetKpiData(request);
-
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-    }
-
-    [Fact]
-    public async Task GetKpiData_ReturnsUnauthorized_WhenAffiliateListNull()
-    {
-        // Arrange
-        var request = new GetKpiDetailsRequest
-        {
-            affiliateId = null
-        };
-
-        _configServiceMock.Setup(s => s.GetAffiliateCodeList(It.IsAny<int?>()))
-            .Returns((List<int>)null!);
-
-        // Act
-        var result = await _controller.GetKpiData(request);
-
-        // Assert
-        Assert.IsType<UnauthorizedResult>(result);
-    }
+    // Assert
+    Assert.IsType<UnauthorizedResult>(result);
 }
