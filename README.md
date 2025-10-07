@@ -1,23 +1,37 @@
-public async Task<IActionResult> GetAffiliatePlantDistribution(GetAffiliatePlantDistributionRequest request)
-{
-    var getAffiliateCodeList = _configServices.GetAffiliateCodeList(request.affiliateId);
-    GetCaseHierarchyRequest affiliateRequest = new()
+    [Fact]
+    public async Task GetAffiliatePlantDistribution_ReturnsOk_WhenDataExists()
     {
-        bigDataAffiliateIdList = $"{string.Join(",", getAffiliateCodeList.Select(n => $"'{n}'"))}"
-    };
-    if (affiliateRequest.bigDataAffiliateIdList == null) return Unauthorized();
-    var caseHierarchyResult = await _currentServices.GetAffiliatesDistributionAsyncNew(request, affiliateRequest.bigDataAffiliateIdList, null);
-    if (caseHierarchyResult == null) return NoContent();
-    else return Ok(caseHierarchyResult);
-}
-public class GetAffiliatePlantDistributionRequest
-{
-    public string? page { get; set; }       
-    public string? startDate { get; set; }
-    public string? endDate { get; set; }
-    public string? kpiCode { get; set; }
-    public string? subCategory { get; set; }
-    public int? affiliateId { get; set; }
-}
-List<int> GetAffiliateCodeList(int? affiliateId);
-Task<List<GroupedData>> GetAffiliatesDistributionAsyncNew(GetAffiliatePlantDistributionRequest request,string affiliateRequest,int? plantId);
+        // Arrange
+        var request = new GetAffiliatePlantDistributionRequest
+        {
+            affiliateId = 1,
+            page = "Dashboard",
+            startDate = "2025-01-01",
+            endDate = "2025-02-01",
+            kpiCode = "KPI001"
+        };
+
+        var affiliateCodes = new List<int> { 101, 102 };
+        _configServiceMock.Setup(x => x.GetAffiliateCodeList(It.IsAny<int?>()))
+            .Returns(affiliateCodes);
+
+        var expectedData = new List<GroupedData>
+        {
+            new GroupedData { GroupName = "Plant A", Value = 100 },
+            new GroupedData { GroupName = "Plant B", Value = 200 }
+        };
+
+        _currentServiceMock.Setup(x => x.GetAffiliatesDistributionAsyncNew(
+            It.IsAny<GetAffiliatePlantDistributionRequest>(),
+            It.IsAny<string>(),
+            It.IsAny<int?>()
+        )).ReturnsAsync(expectedData);
+
+        // Act
+        var result = await _controller.GetAffiliatePlantDistribution(request);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var data = Assert.IsType<List<GroupedData>>(okResult.Value);
+        Assert.Equal(2, data.Count);
+    }
