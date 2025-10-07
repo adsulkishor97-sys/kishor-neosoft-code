@@ -1,68 +1,44 @@
 [Fact]
-public async Task GetKPITooltip_ReturnsOk_WhenDataExists()
+public async Task GetTotalCostOfOwnership_ReturnsOk_WhenDataExists()
 {
     // Arrange
     var fixture = new Fixture();
 
     // Generate request dynamically
-    var request = fixture.Create<KpiInputRequest>();
-
-    // Mock affiliate codes
-    var affiliateCodes = fixture.CreateMany<int>(2).ToList();
-    _mockConfigServices.Setup(s => s.GetAffiliateCodeList(It.IsAny<int?>()))
-        .Returns(affiliateCodes);
-
-    // Mock response dynamically
-    var mockResponse = fixture.Build<KpiTooltipResponse>()
-                              .With(r => r.labels, fixture.CreateMany<Label>(2).ToList())
-                              .With(r => r.kpiTooltipDetails, fixture.Create<KpiTooltipDetails>())
-                              .Create();
-
-    _mockCurrentServices.Setup(s => s.GetKPITooltipAsyncNew(
-        It.IsAny<KpiInputRequest>(),
-        It.IsAny<string>(),
-        It.IsAny<string>(),
-        It.IsAny<string>()
-    )).ReturnsAsync(mockResponse);
-
-    // Act
-    var result = await _controller.GetKPITooltip(request);
-
-    // Assert
-    var okResult = Assert.IsType<OkObjectResult>(result);
-    var value = Assert.IsType<KpiTooltipResponse>(okResult.Value);
-    Assert.NotEmpty(value.labels);
-}
-[Fact]
-public async Task GetAffiliatePlantDistribution_ReturnsOk_WhenDataExists()
-{
-    // Arrange
-    var fixture = new Fixture();
-
-    // Generate request dynamically
-    var request = fixture.Build<GetAffiliatePlantDistributionRequest>()
-                         .With(r => r.page, "Dashboard") // Keep page as required
+    var request = fixture.Build<GetTotalCostOfOwnershipRequest>()
+                         .With(r => r.page, "Dashboard") // keep page if required
                          .Create();
 
-    // Mock affiliate codes dynamically
-    var affiliateCodes = fixture.CreateMany<int>(2).ToList();
-    _mockConfigServices.Setup(s => s.GetAffiliateCodeList(It.IsAny<int?>()))
-        .Returns(affiliateCodes);
+    // Generate expected response dynamically
+    var expectedResponse = fixture.Build<GetTotalCostOfOwnershipResponse>()
+                                  .With(r => r.total, fixture.Create<int>() + fixture.Create<int>()) // ensure total != 0
+                                  .Create();
 
-    // Mock grouped data dynamically
-    var expectedData = fixture.CreateMany<GroupedData>(2).ToList();
-
-    _mockCurrentServices.Setup(s => s.GetAffiliatesDistributionAsyncNew(
-        It.IsAny<GetAffiliatePlantDistributionRequest>(),
-        It.IsAny<string>(),
-        It.IsAny<int?>()
-    )).ReturnsAsync(expectedData);
+    _mockCurrentServices
+        .Setup(s => s.GetTotalCostOfOwnershipAsync(It.IsAny<GetTotalCostOfOwnershipRequest>()))
+        .ReturnsAsync(expectedResponse);
 
     // Act
-    var result = await _controller.GetAffiliatePlantDistribution(request);
+    var result = await _controller.GetTotalCostOfOwnership(request);
 
     // Assert
     var okResult = Assert.IsType<OkObjectResult>(result);
-    var data = Assert.IsType<List<GroupedData>>(okResult.Value);
-    Assert.Equal(expectedData.Count, data.Count);
+    var actual = Assert.IsType<GetTotalCostOfOwnershipResponse>(okResult.Value);
+    Assert.Equal(expectedResponse.total, actual.total);
+}
+[Fact]
+public async Task GetTotalCostOfOwnership_ThrowsException_Returns500()
+{
+    // Arrange
+    var fixture = new Fixture();
+
+    // Generate request dynamically
+    var request = fixture.Create<GetTotalCostOfOwnershipRequest>();
+
+    _mockCurrentServices
+        .Setup(s => s.GetTotalCostOfOwnershipAsync(It.IsAny<GetTotalCostOfOwnershipRequest>()))
+        .ThrowsAsync(new Exception("Database error"));
+
+    // Act & Assert
+    await Assert.ThrowsAsync<Exception>(() => _controller.GetTotalCostOfOwnership(request));
 }
