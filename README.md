@@ -1,69 +1,41 @@
- [Fact]
-    public async Task GetTotalCostOfOwnershipByPlantId_ReturnsOk_WhenDataExists()
+public async Task<IActionResult> GetAssetDistribution(GetAssetDistributionRequest request)
+{
+    var getAffiliateCodeList = _configServices.GetAffiliateCodeList(request.affiliateId);
+    GetCaseHierarchyRequest affiliateRequest = new()
     {
-        // Arrange
-        var request = new GetTotalCostOfOwnershipRequestByplantId
-        {
-            plantId = 10,
-            startDate = "2025-01-01",
-            endDate = "2025-01-31",
-            affiliateId = 5
-        };
+        bigDataAffiliateIdList = $"{string.Join(",", getAffiliateCodeList.Select(n => $"'{n}'"))}"
+    };
+    if (affiliateRequest.bigDataAffiliateIdList == null) return Unauthorized();
+    var caseHierarchyResult = await _currentServices.GetAssetDistributionAsync(request, affiliateRequest.bigDataAffiliateIdList);
+    if (caseHierarchyResult == null) return NoContent();
+    else return Ok(caseHierarchyResult);
+}
+public class GetAssetDistributionRequest
+{
+    public string? page { get; set; }
+    public string? startDate { get; set; }
+    public string? endDate { get; set; }
+    public string? kpiCode { get; set; }
+    public string? subCategory { get; set; }
+    public int? affiliateId { get; set; }
+    public int? plantId { get; set; }
+    public string category { get; set; } = string.Empty;
+}
+public class AssetGroupedData
+{
+    public string? affiliateId { get; set; }
+    public string? name { get; set; }
+    public decimal overall { get; set; }
+    public decimal critical { get; set; }
+    public int overallState { get; set; } = 0;
+    public int criticalState { get; set; } = 0;
+    public long? overallTarget { get; set; } = null;
+    public string? plantId { get; set; }
+    public string? plantName { get; set; }
+    public string? sapId { get; set; }
+    public string? template { get; set; }
+    public string? tidnr { get; set; }
+    public string? pltxt { get; set; }
 
-        var expectedResponse = new GetTotalCostOfOwnershipResponse
-        {
-            maintenance = 1200,
-            operation = 800,
-            total = 2000
-        };
-
-        _currentServiceMock
-            .Setup(s => s.GetTotalCostOfOwnershipByPlantIdAsync(It.IsAny<GetTotalCostOfOwnershipRequestByplantId>()))
-            .ReturnsAsync(expectedResponse);
-
-        // Act
-        var result = await _controller.GetTotalCostOfOwnershipByPlantId(request);
-
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var actualResponse = Assert.IsType<GetTotalCostOfOwnershipResponse>(okResult.Value);
-        Assert.Equal(expectedResponse.total, actualResponse.total);
-    }
-
-    // ✅ Test 2: Should return NoContent when service returns null
-    [Fact]
-    public async Task GetTotalCostOfOwnershipByPlantId_ReturnsNoContent_WhenResponseIsNull()
-    {
-        // Arrange
-        var request = new GetTotalCostOfOwnershipRequestByplantId
-        {
-            plantId = 20,
-            startDate = "2025-01-01",
-            endDate = "2025-01-31"
-        };
-
-        _currentServiceMock
-            .Setup(s => s.GetTotalCostOfOwnershipByPlantIdAsync(It.IsAny<GetTotalCostOfOwnershipRequestByplantId>()))
-            .ReturnsAsync((GetTotalCostOfOwnershipResponse?)null);
-
-        // Act
-        var result = await _controller.GetTotalCostOfOwnershipByPlantId(request);
-
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-    }
-
-    // ✅ Optional Test 3: Handle exceptions gracefully (for full coverage)
-    [Fact]
-    public async Task GetTotalCostOfOwnershipByPlantId_ThrowsException_ShouldPropagate()
-    {
-        // Arrange
-        var request = new GetTotalCostOfOwnershipRequestByplantId { plantId = 30 };
-
-        _currentServiceMock
-            .Setup(s => s.GetTotalCostOfOwnershipByPlantIdAsync(It.IsAny<GetTotalCostOfOwnershipRequestByplantId>()))
-            .ThrowsAsync(new System.Exception("Database error"));
-
-        // Act & Assert
-        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetTotalCostOfOwnershipByPlantId(request));
-    }
+}
+Task<List<AssetGroupedData>> GetAssetDistributionAsync(GetAssetDistributionRequest request, string affiliateRequest);
