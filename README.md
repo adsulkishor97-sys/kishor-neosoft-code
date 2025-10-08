@@ -1,28 +1,45 @@
-public async Task<IActionResult> GetAsseFilters()
-{
-    var result = await _benchMarkServices.GetAssetFilters();
-    if (result == null) return NoContent();
-    else return Ok(result);
-}
-public class GetAssetFiltersResponse
-{
-    public string? filterName { get; set; }
+[Fact]
+    public async Task GetAssetFilters_ReturnsOk_WhenDataExists()
+    {
+        // Arrange
+        var expectedResponse = _fixture.CreateMany<GetAssetFiltersResponse>(3).ToList();
 
-    public List<AffiliateList>? affiliateLists { get; set; }
+        _mockBenchMarkServices
+            .Setup(s => s.GetAssetFilters())
+            .ReturnsAsync(expectedResponse);
 
-    public List<PlantList>? plantLists { get; set; }
+        // Act
+        var result = await _controller.GetAsseFilters();
 
-    public List<ProductList>? productLists { get; set; }
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var actual = Assert.IsType<List<GetAssetFiltersResponse>>(okResult.Value);
+        Assert.Equal(expectedResponse.Count, actual.Count);
+    }
 
-    public List<AssetClassLists>? assetClassLists { get; set; }
+    [Fact]
+    public async Task GetAssetFilters_ReturnsNoContent_WhenDataIsNull()
+    {
+        // Arrange
+        _mockBenchMarkServices
+            .Setup(s => s.GetAssetFilters())
+            .ReturnsAsync((List<GetAssetFiltersResponse>?)null);
 
+        // Act
+        var result = await _controller.GetAsseFilters();
 
-    public List<AssetManufacturerLists>? assetManufacturerLists { get; set; }
+        // Assert
+        Assert.IsType<NoContentResult>(result);
+    }
 
-    public List<ModelNumberLists>? modelNumberLists { get; set; }
+    [Fact]
+    public async Task GetAssetFilters_ThrowsException_ShouldPropagate()
+    {
+        // Arrange
+        _mockBenchMarkServices
+            .Setup(s => s.GetAssetFilters())
+            .ThrowsAsync(new System.Exception("Database error"));
 
-    public List<ProcessServicesLists>? ProcessServicesLists { get; set; }
-
-
-}
-Task<List<GetAssetFiltersResponse>> GetAssetFilters();
+        // Act & Assert
+        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetAsseFilters());
+    }
