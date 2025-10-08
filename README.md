@@ -1,46 +1,34 @@
-[Fact]
-public async Task GetAssetDistribution_ReturnsOk_WhenDataExists()
+ public async Task<IActionResult> GetCaseHierarchy()
+ {
+     var getAffiliateIdList = _configServices.GetAffiliateIdList(null);
+     GetCaseHierarchyRequest request = new()
+     {
+         affiliateIdList = $"{string.Join(",", getAffiliateIdList.Select(n => $"{n}"))}"
+     };
+     var caseHierarchyResult = await _configServices.GetCaseHierarchyAsync(request);
+     if (caseHierarchyResult == null) return NoContent();
+     else return Ok(caseHierarchyResult);
+
+ }
+ public class GetCaseHierarchyRequest
 {
-    // Arrange
-    var fixture = new Fixture();
-
-    // Generate request dynamically
-    var request = fixture.Build<GetAssetDistributionRequest>()
-                         .With(r => r.page, "global") // required property
-                         .Create();
-
-    // Generate affiliate codes dynamically
-    var affiliateCodes = fixture.CreateMany<int>(2).ToList();
-    _mockConfigServices.Setup(x => x.GetAffiliateCodeList(request.affiliateId))
-                       .Returns(affiliateCodes);
-
-    // Generate expected response dynamically
-    var expectedResult = fixture.CreateMany<AssetGroupedData>(2).ToList();
-
-    _mockCurrentServices
-        .Setup(x => x.GetAssetDistributionAsync(It.IsAny<GetAssetDistributionRequest>(), It.IsAny<string>()))
-        .ReturnsAsync(expectedResult);
-
-    // Act
-    var result = await _controller.GetAssetDistribution(request);
-
-    // Assert
-    var okResult = Assert.IsType<OkObjectResult>(result);
-    var response = Assert.IsAssignableFrom<List<AssetGroupedData>>(okResult.Value);
-    Assert.Equal(expectedResult.Count, response.Count);
+    public int? affiliateId { get; set; }
+    public int? plantId { get; set; }
+    public string? bigDataAffiliateIdList {  get; set; }
+    public string? affiliateIdList { get; set; }
 }
-[Fact]
-public async Task GetAssetDistribution_ThrowsException_ShouldPropagate()
+public class CaseHierarchyResponse
 {
-    // Arrange
-    var fixture = new Fixture();
-
-    // Generate request dynamically
-    var request = fixture.Create<GetAssetDistributionRequest>();
-
-    _mockConfigServices.Setup(x => x.GetAffiliateCodeList(request.affiliateId))
-                       .Throws(new Exception("DB connection failed"));
-
-    // Act & Assert
-    await Assert.ThrowsAsync<Exception>(() => _controller.GetAssetDistribution(request));
+    public string? regionName { get; set; }
+    public string? regionShortName { get; set; }
+    public List<AffiliateHierarchy>? affiliates { get; set; }
 }
+public class AffiliateHierarchy
+{
+    public string? affiliateName { get; set; }
+    public string? affiliateImage { get; set; }
+    public int? affiliateID { get; set; }
+    public string? isSeec { get; set; }
+    public List<PlantHierarchy>? plants { get; set; }
+}
+ Task<List<CaseHierarchyResponse>> GetCaseHierarchyAsync(GetCaseHierarchyRequest request);
