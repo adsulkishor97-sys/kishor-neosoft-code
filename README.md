@@ -1,3 +1,3 @@
- if (searchHistoryId == null && searchHistoryId <= 0)
- Change this condition so that it does not always evaluate to 'false'; some subsequent code is never executed.
+ return sequenceOrder.ContainsKey(title)
+ Prefer a 'TryGetValue' call over a Dictionary indexer access guarded by a 'ContainsKey' check to avoid double lookup
 
