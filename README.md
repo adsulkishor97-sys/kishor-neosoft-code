@@ -1,45 +1,24 @@
-[Fact]
-    public async Task GetAssetClass_ReturnsOk_WhenDataExists()
-    {
-        // Arrange
-        var expectedResponse = _fixture.CreateMany<AssetClassResponse>(3).ToList();
+public async Task<IActionResult> GetAffiliateTrend(AffiliateTrendRequest request)
+{
+    var result = await _benchMarkServices.GetAffiliateTrend(request);
+    if (result == null) return NoContent();
+    else return Ok(result);
+}
+public class AffiliateTrendRequest
+{
+    public string? affiliateId { get; set; }
+    public int kpiCode { get; set; }
+    public string startDate { get; set; }=string.Empty;
+    public string endDate { get; set; } = string.Empty;        
 
-        _mockBenchMarkServices
-            .Setup(s => s.GetAssetClass())
-            .ReturnsAsync(expectedResponse);
+}
+public class AffiliateTrendResponse
+{
+    public string? affiliateName { get; set; }
+    public decimal actual { get; set; }
+    public decimal absolute { get; set; }
+    public string? time { get; set; }
+    public string? frequency { get; set; }
 
-        // Act
-        var result = await _controller.GetAssetClass();
-
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var actualData = Assert.IsType<List<AssetClassResponse>>(okResult.Value);
-        Assert.Equal(expectedResponse.Count, actualData.Count);
-    }
-
-    [Fact]
-    public async Task GetAssetClass_ReturnsNoContent_WhenDataIsNull()
-    {
-        // Arrange
-        _mockBenchMarkServices
-            .Setup(s => s.GetAssetClass())
-            .ReturnsAsync((List<AssetClassResponse>?)null);
-
-        // Act
-        var result = await _controller.GetAssetClass();
-
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-    }
-
-    [Fact]
-    public async Task GetAssetClass_ThrowsException_ShouldPropagate()
-    {
-        // Arrange
-        _mockBenchMarkServices
-            .Setup(s => s.GetAssetClass())
-            .ThrowsAsync(new System.Exception("Database failure"));
-
-        // Act & Assert
-        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetAssetClass());
-    }
+}
+Task<List<AffiliateTrendResponse>> GetAffiliateTrend(AffiliateTrendRequest request);
