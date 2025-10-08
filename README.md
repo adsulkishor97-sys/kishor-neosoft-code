@@ -1,50 +1,27 @@
-[Fact]
-    public async Task GetAffiliateTrend_ReturnsOk_WhenDataExists()
-    {
-        // Arrange
-        var request = _fixture.Create<AffiliateTrendRequest>();
-        var expectedResponse = _fixture.CreateMany<AffiliateTrendResponse>(3).ToList();
+public async Task<IActionResult> GetPlantTrend(PlantTrendRequest request)
+{
+    var result = await _benchMarkServices.GetPlantTrend(request);
+    if (result == null) return NoContent();
+    else return Ok(result);
+}
+public class PlantTrendRequest
+{
+    public string? plantId { get; set; }
+    public int? assetClassId { get; set; }
+    public int kpiCode { get; set; }
+    public string startDate { get; set; } = string.Empty;
+    public string endDate { get; set; } = string.Empty;
 
-        _mockBenchMarkServices
-            .Setup(s => s.GetAffiliateTrend(It.IsAny<AffiliateTrendRequest>()))
-            .ReturnsAsync(expectedResponse);
+}
+public class PlantTrendResponse
+{
+    public string? plantName { get; set; }
+    public int? plantId { get; set; }        
+    public decimal actual { get; set; }
+    public decimal absolute { get; set; }
+    public string? time { get; set; }
+    public string? frequency { get; set; }
 
-        // Act
-        var result = await _controller.GetAffiliateTrend(request);
 
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var actual = Assert.IsType<List<AffiliateTrendResponse>>(okResult.Value);
-        Assert.Equal(expectedResponse.Count, actual.Count);
-    }
-
-    [Fact]
-    public async Task GetAffiliateTrend_ReturnsNoContent_WhenDataIsNull()
-    {
-        // Arrange
-        var request = _fixture.Create<AffiliateTrendRequest>();
-
-        _mockBenchMarkServices
-            .Setup(s => s.GetAffiliateTrend(It.IsAny<AffiliateTrendRequest>()))
-            .ReturnsAsync((List<AffiliateTrendResponse>?)null);
-
-        // Act
-        var result = await _controller.GetAffiliateTrend(request);
-
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-    }
-
-    [Fact]
-    public async Task GetAffiliateTrend_ThrowsException_ShouldPropagate()
-    {
-        // Arrange
-        var request = _fixture.Create<AffiliateTrendRequest>();
-
-        _mockBenchMarkServices
-            .Setup(s => s.GetAffiliateTrend(It.IsAny<AffiliateTrendRequest>()))
-            .ThrowsAsync(new System.Exception("Database failure"));
-
-        // Act & Assert
-        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetAffiliateTrend(request));
-    }
+}
+Task<List<PlantTrendResponse>> GetPlantTrend(PlantTrendRequest request);
