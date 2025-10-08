@@ -1,34 +1,88 @@
-public async Task<IActionResult> GetCriticalAssetDetails(GetHierarchyInfoRequest request)
-{
-    var getAffiliateCodeList = _configServices.GetAffiliateCodeList(request.affiliateId);
-    GetCaseHierarchyRequest affiliateRequest = new()
+[Fact]
+    public async Task GetCriticalAssetDetails_ReturnsOk_WhenDataExists()
     {
-        bigDataAffiliateIdList = $"{string.Join(",", getAffiliateCodeList.Select(n => $"'{n}'"))}"
-    };
-    if (affiliateRequest.bigDataAffiliateIdList == null) return Unauthorized();
-    var caseHierarchyResult = await _configServices.GetCriticalAssetDetailsAsyncNew(request.page!, affiliateRequest.bigDataAffiliateIdList);
-    if (caseHierarchyResult == null) return NoContent();
-    else return Ok(caseHierarchyResult);
+        // Arrange
+        var request = _fixture.Create<GetHierarchyInfoRequest>();
+        var affiliateCodes = _fixture.CreateMany<int>(3).ToList();
+        var expectedResponse = _fixture.CreateMany<GetCriticalAssetDetailsResponse>(2).ToList();
 
-}
-public class GetHierarchyInfoRequest
-{
-    public int? affiliateId { get; set; }
-    public int? plantId { get; set; }
-    public string? page { get; set; }
-}
-public class GetCaseHierarchyRequest
-{
-    public int? affiliateId { get; set; }
-    public int? plantId { get; set; }
-    public string? bigDataAffiliateIdList {  get; set; }
-    public string? affiliateIdList { get; set; }
-}
-public class GetCriticalAssetDetailsResponse
-{
-    public string? category { get; set; }
-    public string? absolute { get; set; }
-    public double? percentage { get; set; }
+        _mockConfigServices
+            .Setup(s => s.GetAffiliateCodeList(request.affiliateId))
+            .Returns(affiliateCodes);
 
-}
-Task<List<GetCriticalAssetDetailsResponse>> GetCriticalAssetDetailsAsyncNew(string page, string bigDataAffiliateRequest);
+        _mockConfigServices
+            .Setup(s => s.GetCriticalAssetDetailsAsyncNew(
+                request.page!,
+                It.IsAny<string>()))
+            .ReturnsAsync(expectedResponse);
+
+        // Act
+        var result = await _controller.GetCriticalAssetDetails(request);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var actual = Assert.IsType<List<GetCriticalAssetDetailsResponse>>(okResult.Value);
+        Assert.Equal(expectedResponse.Count, actual.Count);
+    }
+
+    [Fact]
+    public async Task GetCriticalAssetDetails_ReturnsUnauthorized_WhenAffiliateListIsNull()
+    {
+        // Arrange
+        var request = _fixture.Create<GetHierarchyInfoRequest>();
+
+        _mockConfigServices
+            .Setup(s => s.GetAffiliateCodeList(request.affiliateId))
+            .Returns((List<int>?)null);
+
+        // Act
+        var result = await _controller.GetCriticalAssetDetails(request);
+
+        // Assert
+        Assert.IsType<UnauthorizedResult>(result);
+    }
+
+    [Fact]
+    public async Task GetCriticalAssetDetails_ReturnsNoContent_WhenResponseIsNull()
+    {
+        // Arrange
+        var request = _fixture.Create<GetHierarchyInfoRequest>();
+        var affiliateCodes = _fixture.CreateMany<int>(3).ToList();
+
+        _mockConfigServices
+            .Setup(s => s.GetAffiliateCodeList(request.affiliateId))
+            .Returns(affiliateCodes);
+
+        _mockConfigServices
+            .Setup(s => s.GetCriticalAssetDetailsAsyncNew(
+                It.IsAny<string>(),
+                It.IsAny<string>()))
+            .ReturnsAsync((List<GetCriticalAssetDetailsResponse>?)null);
+
+        // Act
+        var result = await _controller.GetCriticalAssetDetails(request);
+
+        // Assert
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task GetCriticalAssetDetails_ThrowsException_ShouldPropagate()
+    {
+        // Arrange
+        var request = _fixture.Create<GetHierarchyInfoRequest>();
+        var affiliateCodes = _fixture.CreateMany<int>(2).ToList();
+
+        _mockConfigServices
+            .Setup(s => s.GetAffiliateCodeList(request.affiliateId))
+            .Returns(affiliateCodes);
+
+        _mockConfigServices
+            .Setup(s => s.GetCriticalAssetDetailsAsyncNew(
+                It.IsAny<string>(),
+                It.IsAny<string>()))
+            .ThrowsAsync(new System.Exception("Database error"));
+
+        // Act & Assert
+        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetCriticalAssetDetails(request));
+    }
