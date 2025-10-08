@@ -1,65 +1,21 @@
-using Xunit;
-using Moq;
-using AutoFixture;
-using Microsoft.AspNetCore.Mvc;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-
-public class BenchmarkControllerTests
+public async Task<IActionResult> GetAffiliateCriteria(GetBenchmarkCriteriaListRequest request)
 {
-    private readonly Mock<IBenchMarkServices> _mockBenchMarkServices;
-    private readonly BenchmarkController _controller;
-    private readonly Fixture _fixture;
-
-    public BenchmarkControllerTests()
-    {
-        _mockBenchMarkServices = new Mock<IBenchMarkServices>();
-        _controller = new BenchmarkController(_mockBenchMarkServices.Object);
-        _fixture = new Fixture();
-    }
-
-    [Fact]
-    public async Task GetPlantList_ReturnsOk_WhenDataExists()
-    {
-        // Arrange
-        var expectedResponse = _fixture.CreateMany<PlantListResponse>(3).ToList();
-
-        _mockBenchMarkServices
-            .Setup(s => s.GetPlantList())
-            .ReturnsAsync(expectedResponse);
-
-        // Act
-        var result = await _controller.GetPlantList();
-
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var actualResponse = Assert.IsType<List<PlantListResponse>>(okResult.Value);
-        Assert.Equal(expectedResponse.Count, actualResponse.Count);
-    }
-
-    [Fact]
-    public async Task GetPlantList_ReturnsNoContent_WhenDataIsNull()
-    {
-        // Arrange
-        _mockBenchMarkServices
-            .Setup(s => s.GetPlantList())
-            .ReturnsAsync((List<PlantListResponse>?)null);
-
-        // Act
-        var result = await _controller.GetPlantList();
-
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-    }
-
-    [Fact]
-    public async Task GetPlantList_ThrowsException_ShouldPropagate()
-    {
-        // Arrange
-        _mockBenchMarkServices
-            .Setup(s => s.GetPlantList())
-            .ThrowsAsync(new System.Exception("Database connection failed"));
-
-        // Act & Assert
-        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetPlantList());
-    }
+    var affiliatecriteriaListResult = await _benchMarkServices.GetAffiliateCriteria(request);
+    if (affiliatecriteriaListResult == null) return NoContent();
+    else return Ok(affiliatecriteriaListResult);
+}
+public class GetBenchmarkCriteriaListRequest
+{
+    public string? page { get; set; }
+}
+public class GetBenchmarkCriteriaListResponse
+{
+    public string? kpiType { get; set; }
+    public List<BenchmarkCriteriaKpiList> data { get; set; } = new List<BenchmarkCriteriaKpiList>();
+}
+public class BenchmarkCriteriaKpiList
+{
+    public string? kpiCode { get; set; }
+    public string? kpiName { get; set; }
+}
+Task<List<GetBenchmarkCriteriaListResponse>> GetAffiliateCriteria(GetBenchmarkCriteriaListRequest request);
