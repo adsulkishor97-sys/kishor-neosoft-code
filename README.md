@@ -10,3 +10,13 @@
                         ? sequenceOrder[title] : int.MaxValue;
                     }).ToList();
 
+lstLabel = lstLabel.OrderBy(Label =>
+{
+    if (Label?.title == null)
+        return int.MaxValue;
+
+    var title = Label.title;
+    return sequenceOrder.TryGetValue(title, out var value)
+        ? value
+        : int.MaxValue;
+}).ToList();
