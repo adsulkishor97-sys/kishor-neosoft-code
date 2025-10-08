@@ -1,63 +1,38 @@
-using Xunit;
-using Moq;
-using AutoFixture;
-using Microsoft.AspNetCore.Mvc;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-
-public class CaseControllerTests
+public async Task<IActionResult> GetHierarchyInfo(GetHierarchyInfoRequest request)
 {
-    private readonly Mock<IConfigServices> _mockConfigServices;
-    private readonly CaseController _controller;
-    private readonly Fixture _fixture;
-
-    public CaseControllerTests()
+    var getAffiliateCodeList = _configServices.GetAffiliateCodeList(request.affiliateId);
+    GetCaseHierarchyRequest affiliateRequest = new()
     {
-        _mockConfigServices = new Mock<IConfigServices>();
-        _controller = new CaseController(_mockConfigServices.Object);
-        _fixture = new Fixture();
-    }
+        affiliateIdList = $"{string.Join(",", getAffiliateCodeList.Select(n => $"{n}"))}",
+        bigDataAffiliateIdList = $"{string.Join(",", getAffiliateCodeList.Select(n => $"'{n}'"))}"
+    };
+    if (affiliateRequest.affiliateIdList == null) return Unauthorized();
+    var caseHierarchyResult = await _configServices.GetHierarchyInfoAsync(request.page!, affiliateRequest.affiliateIdList, affiliateRequest.bigDataAffiliateIdList, request.affiliateId!, request.plantId);
+    if (caseHierarchyResult == null) return NoContent();
 
-    [Fact]
-    public async Task GetCaseHierarchy_ReturnsOk_WhenDataExists()
-    {
-        // Arrange
-        var affiliateIds = _fixture.CreateMany<int>(3).ToList();
+    else return Ok(caseHierarchyResult);
 
-        var expectedResponse = _fixture.CreateMany<CaseHierarchyResponse>(2).ToList();
-
-        _mockConfigServices.Setup(s => s.GetAffiliateIdList(It.IsAny<int?>()))
-            .Returns(affiliateIds);
-
-        _mockConfigServices.Setup(s => s.GetCaseHierarchyAsync(It.IsAny<GetCaseHierarchyRequest>()))
-            .ReturnsAsync(expectedResponse);
-
-        // Act
-        var result = await _controller.GetCaseHierarchy();
-
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var actual = Assert.IsAssignableFrom<List<CaseHierarchyResponse>>(okResult.Value);
-        Assert.Equal(expectedResponse.Count, actual.Count);
-    }
-
-    [Fact]
-    public async Task GetCaseHierarchy_ReturnsNoContent_WhenDataIsNull()
-    {
-        // Arrange
-        var affiliateIds = _fixture.CreateMany<int>(2).ToList();
-
-        _mockConfigServices.Setup(s => s.GetAffiliateIdList(It.IsAny<int?>()))
-            .Returns(affiliateIds);
-
-        _mockConfigServices.Setup(s => s.GetCaseHierarchyAsync(It.IsAny<GetCaseHierarchyRequest>()))
-            .ReturnsAsync((List<CaseHierarchyResponse>?)null);
-
-        // Act
-        var result = await _controller.GetCaseHierarchy();
-
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-    }
 }
+ public class GetHierarchyInfoRequest
+ {
+     public int? affiliateId { get; set; }
+     public int? plantId { get; set; }
+     public string? page { get; set; }
+ }
+  public class GetCaseHierarchyRequest
+ {
+     public int? affiliateId { get; set; }
+     public int? plantId { get; set; }
+     public string? bigDataAffiliateIdList {  get; set; }
+     public string? affiliateIdList { get; set; }
+ }
+ public class GetHierarchyInfoResponse
+{
+    public int? affiliates { get; set; }
+    public int? plants { get; set; }
+    public int? product { get; set; }
+    public int? assetClass { get; set; }
+    public int? assets { get; set; }
+    public int?  criticalAssets { get; set; }
+}
+Task<GetHierarchyInfoResponse?> GetHierarchyInfoAsync(string page, string sqlAffiliateRequest, string bigDataAffiliateRequest, int? affiliateId, int? plantId);
