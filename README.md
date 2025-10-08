@@ -1,45 +1,44 @@
-[Fact]
-    public async Task GetAssetFilters_ReturnsOk_WhenDataExists()
+public async Task<IActionResult> GetCaseHierarchy()
+{
+    var getAffiliateIdList = _configServices.GetAffiliateIdList(null);
+    GetCaseHierarchyRequest request = new()
     {
-        // Arrange
-        var expectedResponse = _fixture.CreateMany<GetAssetFiltersResponse>(3).ToList();
+        affiliateIdList = $"{string.Join(",", getAffiliateIdList.Select(n => $"{n}"))}"
+    };
+    CaseHierarchyTokenAccessDetails accessDetails = _configServices.GetCaseHierarchyTokenAccessDetails();
+    var caseHierarchyResult = await _configServices.GetCaseHierarchyAsync(request, accessDetails);
+    if (caseHierarchyResult == null) return NoContent();
+    else return Ok(caseHierarchyResult);
 
-        _mockBenchMarkServices
-            .Setup(s => s.GetAssetFilters())
-            .ReturnsAsync(expectedResponse);
-
-        // Act
-        var result = await _controller.GetAsseFilters();
-
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var actual = Assert.IsType<List<GetAssetFiltersResponse>>(okResult.Value);
-        Assert.Equal(expectedResponse.Count, actual.Count);
-    }
-
-    [Fact]
-    public async Task GetAssetFilters_ReturnsNoContent_WhenDataIsNull()
-    {
-        // Arrange
-        _mockBenchMarkServices
-            .Setup(s => s.GetAssetFilters())
-            .ReturnsAsync((List<GetAssetFiltersResponse>?)null);
-
-        // Act
-        var result = await _controller.GetAsseFilters();
-
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-    }
-
-    [Fact]
-    public async Task GetAssetFilters_ThrowsException_ShouldPropagate()
-    {
-        // Arrange
-        _mockBenchMarkServices
-            .Setup(s => s.GetAssetFilters())
-            .ThrowsAsync(new System.Exception("Database error"));
-
-        // Act & Assert
-        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetAsseFilters());
-    }
+}
+public class GetCaseHierarchyRequest
+{
+    public int? affiliateId { get; set; }
+    public int? plantId { get; set; }
+    public string? bigDataAffiliateIdList {  get; set; }
+    public string? affiliateIdList { get; set; }
+}
+public class CaseHierarchyResponse
+{
+    public string? regionName { get; set; }
+    public string? regionShortName { get; set; }
+    public List<AffiliateHierarchy>? affiliates { get; set; }
+}
+public class AffiliateHierarchy
+{
+    public string? affiliateName { get; set; }
+    public string? affiliateImage { get; set; }
+    public int? affiliateID { get; set; }
+    public string? isSeec { get; set; }
+    public bool? access { get; set; }
+    public List<PlantHierarchy>? plants { get; set; }
+}
+public class PlantHierarchy
+{
+    public int? plantId { get; set; }
+    public string? plantName { get; set; }
+    public string? plantType { get; set; }
+    public string? plantGroup { get; set; }
+    public bool? access { get; set; }
+}
+Task<List<CaseHierarchyResponse>> GetCaseHierarchyAsync(GetCaseHierarchyRequest request,CaseHierarchyTokenAccessDetails accessDetails);
