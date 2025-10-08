@@ -1,45 +1,28 @@
-[Fact]
-    public async Task GetPlantFilters_ReturnsOk_WhenDataExists()
-    {
-        // Arrange
-        var expectedResponse = _fixture.CreateMany<FinalFilterResponse>(3).ToList();
+public async Task<IActionResult> GetAsseFilters()
+{
+    var result = await _benchMarkServices.GetAssetFilters();
+    if (result == null) return NoContent();
+    else return Ok(result);
+}
+public class GetAssetFiltersResponse
+{
+    public string? filterName { get; set; }
 
-        _mockBenchMarkServices
-            .Setup(s => s.GetPlantFilters())
-            .ReturnsAsync(expectedResponse);
+    public List<AffiliateList>? affiliateLists { get; set; }
 
-        // Act
-        var result = await _controller.GetPlantFilters();
+    public List<PlantList>? plantLists { get; set; }
 
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var actual = Assert.IsType<List<FinalFilterResponse>>(okResult.Value);
-        Assert.Equal(expectedResponse.Count, actual.Count);
-    }
+    public List<ProductList>? productLists { get; set; }
 
-    [Fact]
-    public async Task GetPlantFilters_ReturnsNoContent_WhenDataIsNull()
-    {
-        // Arrange
-        _mockBenchMarkServices
-            .Setup(s => s.GetPlantFilters())
-            .ReturnsAsync((List<FinalFilterResponse>?)null);
+    public List<AssetClassLists>? assetClassLists { get; set; }
 
-        // Act
-        var result = await _controller.GetPlantFilters();
 
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-    }
+    public List<AssetManufacturerLists>? assetManufacturerLists { get; set; }
 
-    [Fact]
-    public async Task GetPlantFilters_ThrowsException_ShouldPropagate()
-    {
-        // Arrange
-        _mockBenchMarkServices
-            .Setup(s => s.GetPlantFilters())
-            .ThrowsAsync(new System.Exception("Database error"));
+    public List<ModelNumberLists>? modelNumberLists { get; set; }
 
-        // Act & Assert
-        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetPlantFilters());
-    }
+    public List<ProcessServicesLists>? ProcessServicesLists { get; set; }
+
+
+}
+Task<List<GetAssetFiltersResponse>> GetAssetFilters();
