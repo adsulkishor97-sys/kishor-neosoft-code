@@ -37,3 +37,4 @@ var query = ReplaceAssetQuery(new AssetQueryParameters
     SapIds = sapIds
 });
 
+ReplaceAssetQuery(item.bestAchievedEver!, formatedStartdate, formatedEnddate, formatedStartdateyymmdd, formatedEnddateyymmdd, "", request, quatedpmcode, formatSapIds);
