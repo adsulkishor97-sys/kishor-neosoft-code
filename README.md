@@ -159,3 +159,11 @@ private static List<PlantBenchmarkGroupedData> CreateEmptyBenchmarkResult()
         }
     };
 }
+ public async Task<List<KpiDataJsonResponse>> GetBusinessKPIDetails()
+ {
+     return await ExecuteQueryListAsync<KpiDataJsonResponse>
+        (SPConstant.USP_UI_GET_BUSINESS_KPI_DETAILS,
+        new
+        {
+        });
+ }
