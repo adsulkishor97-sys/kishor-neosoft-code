@@ -1,76 +1,138 @@
-public async Task<List<AssetBenchmarkComparisionResponse>> GetAssetBenchmarkComparisionAsync(
-    AssetBenchmarkComparisionRequest assetBenchmarkComparisionRequest)
+public async Task<List<BenchmarkGroupedData>> GetAffiliateBenchmark(GetAffiliateBenchmarkRequest request)
 {
-    var (assetResponseList, formatedSapIds) = PrepareAssetBenchmarkComparisionInputs(assetBenchmarkComparisionRequest);
+    List<BenchmarkGroupedData> groupData = new List<BenchmarkGroupedData>();
+    //convert string to datetime
+    var startDateTime = DateTime.Parse(request.startDate!, CultureInfo.InvariantCulture);
+    var endDateTime = DateTime.Parse(request.endDate!, CultureInfo.InvariantCulture);
 
-    var results = await ExecuteAssetBenchmarkComparisionQueriesAsync(
-        assetResponseList,
-        assetBenchmarkComparisionRequest.kpiCode,
-        assetBenchmarkComparisionRequest.startDate!,
-        assetBenchmarkComparisionRequest.endDate!,
-        formatedSapIds
-    );
+    //convert format as yyyymm 202508
+    var formatedStartdate = startDateTime.ToString("yyyyMM");
+    var formatedEnddate = endDateTime.ToString("yyyyMM");
 
-    return results;
-}
 
-#region Helper Methods
+    //convert format as yyyy-mm-dd 2025-08-01
+   var  formatedStartdateyymmdd = startDateTime.ToString("yyyy-MM-dd");
+   var formatedEnddateyymmdd = endDateTime.ToString("yyyy-MM-dd");
 
-/// <summary>
-/// Prepares input data (asset list and formatted SAP IDs) for the benchmark comparison.
-/// </summary>
-private static (List<BenchmarkComparision> assetResponseList, string formatedSapIds)
-    PrepareAssetBenchmarkComparisionInputs(AssetBenchmarkComparisionRequest request)
-{
-    var assetBenchmarkComparisionQueries = new AssetBenchmarkComparisionQueries();
-    var assetResponseList = assetBenchmarkComparisionQueries.assetDataList.ToList();
+    AffiliateBenchmarkQuery affiliatebenchmarkquery = new AffiliateBenchmarkQuery(); 
+    List<AffiliateBenchmark> GlobalResponseList = affiliatebenchmarkquery.affiliateDataList.ToList();
+    var sqlKpiDataList = await _benchMarkRepository.GetBusinessKPIDetails();
+    var kpiinfo = sqlKpiDataList.Find(x => x.kpiCode == request.kpiCode);
+    var sqlAffiliateName = await _benchMarkRepository.GetAffiliateLists();
+    var affiliateds = request.affiliateId?.Split(',').Select(int.Parse).ToList();
 
-    var sapIds = request.sapId?.Split(',').Select(int.Parse).ToList() ?? new List<int>();
-    var formatedSapIds = string.Join(",", sapIds.Select(x => x.ToString().Length < 18 ? $"'000000000{x}'" : $"'{x}'"));
+    var affiliateList = new List<GetCaseHierarchyResponse>();
+    foreach (var item in affiliateds!)
+    {
+        var lstPlants = await _benchMarkRepository.GetCaseHierarchyAsync(item);
+        affiliateList.AddRange(lstPlants);
+    }
 
-    return (assetResponseList, formatedSapIds);
-}
 
-/// <summary>
-/// Executes all asset benchmark comparison queries asynchronously and aggregates the results.
-/// </summary>
-private async Task<List<AssetBenchmarkComparisionResponse>> ExecuteAssetBenchmarkComparisionQueriesAsync(
-    List<BenchmarkComparision> assetResponseList,
-    string kpiCode,
-    string startDate,
-    string endDate,
-    string formatedSapIds)
-{
-    var tasks = assetResponseList
-        .Where(a => a.kpiCode == kpiCode)
-        .Select(item => ExecuteSingleAssetBenchmarkQueryAsync(item, startDate, endDate, formatedSapIds))
-        .ToList();
+    foreach (var item in GlobalResponseList.Where(a => a.kpiCode == request.kpiCode))
+    {
+        var actual = AffilateReplaceQuery(item.query!, formatedStartdateyymmdd, formatedEnddateyymmdd, formatedStartdate, formatedEnddate, "", request);
+        var queryBestAchievedEver = AffilateReplaceQuery(item.bestAchievedEver!, formatedStartdateyymmdd, formatedEnddateyymmdd, formatedStartdate, formatedEnddate, "", request);
 
-    var data = await Task.WhenAll(tasks);
-    return data.SelectMany(x => x).ToList();
-}
 
-/// <summary>
-/// Executes a single benchmark comparison query and returns mapped results.
-/// </summary>
-private async Task<List<AssetBenchmarkComparisionResponse>> ExecuteSingleAssetBenchmarkQueryAsync(
-    BenchmarkComparision item,
-    string startDate,
-    string endDate,
-    string formatedSapIds)
-{
-    var query = ReplaceQuery(item.query!, startDate, endDate, "", "", formatedSapIds, "");
-
-    return await _benchMarkRepository.ExecuteBigDataQuery<AssetBenchmarkComparisionResponse>(
-        query,
-        reader => new AssetBenchmarkComparisionResponse
+        var actualQuery = await _benchMarkRepository.ExecuteBigDataQuery<BenchmarkGroupedData>(actual, reader =>
         {
-            sapId = reader["sap_id"] != DBNull.Value ? reader["sap_id"].ToString() : "0",
-            actual = reader["actual"] != DBNull.Value ? Convert.ToDecimal(reader["actual"]) : 0,
-            absolute = reader["absolute"] != DBNull.Value ? Convert.ToDecimal(reader["absolute"]) : 0,
-            modelNumber = reader["model_number"] != DBNull.Value ? reader["model_number"].ToString() : "0",
-            companyName = reader["manufacturer"] != DBNull.Value ? reader["manufacturer"].ToString() : "0",
-        }) ?? new List<AssetBenchmarkComparisionResponse>();
-}
+            int affilateIdFromBigData = reader["affiliate_id"] != DBNull.Value ? Convert.ToInt32(reader["affiliate_id"]) : 0;
+            string? affilateName = sqlAffiliateName.Find(x => x.affiliateId == affilateIdFromBigData)?.affiliateName;
+            return new BenchmarkGroupedData
+            {
+               
+                affiliateName = affilateName,
+                actual = reader["actual"] != DBNull.Value ? Convert.ToDecimal(reader["actual"]) : 0,
+                absolute = reader["absolute"] != DBNull.Value ? Convert.ToDecimal(reader["absolute"]) : 0,                        
+            };
+        }) ?? new List<BenchmarkGroupedData>();
+        var bestAchievedResult = await _benchMarkRepository.ExecuteBigDataQuery<BenchmarkGroupedData>(queryBestAchievedEver, reader =>
+        {
+            int affilateIdFromBigData = reader["affiliate_id"] != DBNull.Value ? Convert.ToInt32(reader["affiliate_id"]) : 0;
+            string? affilateName = sqlAffiliateName.Find(x => x.affiliateId == affilateIdFromBigData)?.affiliateName;
+            return new BenchmarkGroupedData
+            {
+                bestAchievedEver = reader["best_achieved"] != DBNull.Value ? Convert.ToDecimal(reader["best_achieved"]) : 0,
+                affiliateName = affilateName
+            };
+        }) ?? new List<BenchmarkGroupedData>();
 
-#endregion
+         groupData = (from a in actualQuery
+                      join b in bestAchievedResult
+                         on a.affiliateName equals b.affiliateName into temp
+                         from b in temp.DefaultIfEmpty()
+                         select new BenchmarkGroupedData
+                         {
+                             affiliateName= a.affiliateName,
+                             actual= a.actual,
+                             absolute= a.absolute,
+                             bestAchievedEver=b?.bestAchievedEver ?? 0
+                         }).GroupBy(x=>x.affiliateName).Select(g=> new BenchmarkGroupedData
+                         { 
+                             affiliateName=g.Key,
+                             actual=g.Sum(x=>x.actual),
+                             absolute= g.Sum(x=>x.absolute),
+                             bestAchievedEver=g.Max(x=>x.bestAchievedEver)
+                         }
+                         ).ToList();
+
+
+        decimal bestAchivedEverMin;
+        decimal bestAchivedForSinglePeriod;
+
+            if (kpiinfo?.direction == 1)
+            {
+            bestAchivedEverMin = (groupData != null && groupData.Count > 0) ? groupData.Min(x => x.bestAchievedEverMin) : 0;
+            bestAchivedForSinglePeriod = (groupData != null && groupData.Count > 0) ? groupData.Min(x => x.actual) : 0;
+            
+            }
+            else
+            {
+                bestAchivedEverMin = groupData.Max(x => x.bestAchievedEver);
+                bestAchivedForSinglePeriod = groupData.Max(x => x.actual);
+            }
+
+
+        if (actualQuery == null || actualQuery.Count == 0)
+        {
+            return new List<BenchmarkGroupedData>();
+        }
+        if (queryBestAchievedEver == null || queryBestAchievedEver.Length == 0)
+        {
+            return new List<BenchmarkGroupedData>();
+        }
+
+
+
+
+             int? sqlDirection = sqlKpiDataList.Where(x => x.kpiCode == request.kpiCode).Select(x => x.direction).FirstOrDefault();
+            long? targetMin = sqlKpiDataList.Where(x => x.kpiCode == request.kpiCode).Select(x => x.overallTargetMin).FirstOrDefault();
+            long? targetMax = sqlKpiDataList.Where(x => x.kpiCode == request.kpiCode).Select(x => x.overallTargetMax).FirstOrDefault();
+            foreach (var itemData in groupData!)
+            {
+
+                if (itemData.actual >= targetMin && itemData.actual <= targetMax)
+                {
+                    itemData.state = 1;
+                }
+                else
+                {
+                    itemData.state = 0;
+                }
+
+
+                itemData.direction = sqlDirection;
+                itemData.target = targetMax!;
+                itemData.bestAchievedEverMin = bestAchivedEverMin;
+                itemData.bestAchievedForSinglePeriod = bestAchivedForSinglePeriod;
+
+            }
+
+        
+
+    }
+
+
+    return groupData!;
+}
