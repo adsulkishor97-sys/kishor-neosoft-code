@@ -186,3 +186,49 @@ private static void UpdateComputedFields(
 }
 
 #endregion
+
+private static T GetValueOrDefault<T>(IDataRecord reader, string columnName, T defaultValue = default!)
+{
+    try
+    {
+        int ordinal = reader.GetOrdinal(columnName);
+        return reader.IsDBNull(ordinal) ? defaultValue : (T)Convert.ChangeType(reader.GetValue(ordinal), typeof(T));
+    }
+    catch (IndexOutOfRangeException)
+    {
+        // Column not found
+        return defaultValue;
+    }
+    catch (InvalidCastException)
+    {
+        // Type mismatch
+        return defaultValue;
+    }
+}
+private async Task<List<BenchmarkGroupedData>> ExecuteAffiliateDataQueryAsync(
+    string query,
+    List<AffiliateListResponse> sqlAffiliateName,
+    bool isBest = false)
+{
+    return await _benchMarkRepository.ExecuteBigDataQuery<BenchmarkGroupedData>(
+        query,
+        reader =>
+        {
+            int affiliateId = GetValueOrDefault(reader, "affiliate_id", 0);
+            string? affiliateName = sqlAffiliateName.Find(x => x.affiliateId == affiliateId)?.affiliateName;
+
+            return isBest
+                ? new BenchmarkGroupedData
+                {
+                    affiliateName = affiliateName,
+                    bestAchievedEver = GetValueOrDefault(reader, "best_achieved", 0m)
+                }
+                : new BenchmarkGroupedData
+                {
+                    affiliateName = affiliateName,
+                    actual = GetValueOrDefault(reader, "actual", 0m),
+                    absolute = GetValueOrDefault(reader, "absolute", 0m)
+                };
+        }) ?? new List<BenchmarkGroupedData>();
+}
+
