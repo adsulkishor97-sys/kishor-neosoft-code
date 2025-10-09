@@ -127,3 +127,11 @@
             itemData.direction = sqldirection;
         }
     }
+ public async Task<List<KpiDataJsonResponse>> GetBusinessKPIDetails()
+ {
+     return await ExecuteQueryListAsync<KpiDataJsonResponse>
+        (SPConstant.USP_UI_GET_BUSINESS_KPI_DETAILS,
+        new
+        {
+        });
+ }
