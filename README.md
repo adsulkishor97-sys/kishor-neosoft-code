@@ -1,139 +1,86 @@
-public async Task<List<PlantBenchmarkGroupedData>> GetPlantBenchmark(GetPlantBenchmarkRequest request)
+public async Task<List<AssetBenchmarkGroupedData>> GetAssetBenchmark(GetAssetBenchmarkRequest request)
 {
-    // 1. Format Dates
-    var (formatedStartdate, formatedEnddate, formatedStartdateyymmdd, formatedEnddateyymmdd) = FormatDates(request);
-
-    // 2. Format PlantIds & templateId
-    var formatPlantIds = FormatPlantIds(request.plantId);
-    var templateIdlist = request.assetClassId != 0 ? request.assetClassId.ToString() : string.Empty;
-
-    // 3. Get KPI details
-    var sqlKpiDataList = await _benchMarkRepository.GetBusinessKPIDetails();
-    var kpiinfo = sqlKpiDataList.Find(x => x.kpiCode == request.kpiCode);
-
-    // 4. Fetch Benchmark data
-    var groupData = await GetBenchmarkDataAsync(
-        request,
-        formatedStartdate,
-        formatedEnddate,
-        formatedStartdateyymmdd,
-        formatedEnddateyymmdd,
-        formatPlantIds,
-        templateIdlist);
-
-    // 5. Return default if no data
-    if (groupData == null || groupData.Count == 0)
-        return CreateDefaultBenchmarkResult();
-
-    // 6. Add computed fields
-    AddComputedFields(groupData, sqlKpiDataList, request.kpiCode, kpiinfo);
-
-    return groupData!;
-}
-
-// Helper: Format dates
-private static (string, string, string, string) FormatDates(GetPlantBenchmarkRequest request)
-{
+    //convert string to datetime
     var startDateTime = DateTime.Parse(request.startDate!, CultureInfo.InvariantCulture);
     var endDateTime = DateTime.Parse(request.endDate!, CultureInfo.InvariantCulture);
 
-    return (
-        startDateTime.ToString("yyyyMM"),
-        endDateTime.ToString("yyyyMM"),
-        startDateTime.ToString("yyyy-MM-dd"),
-        endDateTime.ToString("yyyy-MM-dd")
-    );
-}
+    //convert format as yyyymm 202508
+    var formatedStartdate = startDateTime.ToString("yyyyMM");
+    var formatedEnddate = endDateTime.ToString("yyyyMM");
 
-// Helper: Format PlantIds string
-private static string FormatPlantIds(string? plantId)
-{
-    var plantIds = plantId?.Split(',').Select(int.Parse).ToList() ?? new List<int>();
-    return string.Join(",", plantIds);
-}
+    //convert format as yyyy-mm-dd 2025-08-01
+    var formatedStartdateyymmdd = startDateTime.ToString("yyyy-MM-dd");
+    var formatedEnddateyymmdd = endDateTime.ToString("yyyy-MM-dd");
+    AssetBenchmarkQuery assetbenchmarkquery = new AssetBenchmarkQuery();
+    List<AffiliateBenchmark> FileGlobalResponseList = assetbenchmarkquery.plantDataList.ToList();
+    var sqlKpiDataList = await _benchMarkRepository.GetBusinessKPIDetails();
+    var kpiinfo = sqlKpiDataList.Find(x => x.kpiCode == request.kpiCode);
+    string quatedpmcode = "";
+    // get plantIds based on affilateId
+    var sapIds = request.sapId?.Split(',').Select(int.Parse).ToList();
+    var formatSapIds = string.Join(",", sapIds!.Select(x => x.ToString().Length<18 ? $"'000000000{x}'" : $"'{x}'") );
 
-// Helper: Fetch Benchmark data
-private async Task<List<PlantBenchmarkGroupedData>> GetBenchmarkDataAsync(
-    GetPlantBenchmarkRequest request,
-    string formatedStartdate,
-    string formatedEnddate,
-    string formatedStartdateyymmdd,
-    string formatedEnddateyymmdd,
-    string formatPlantIds,
-    string templateIdlist)
-{
-    var plantBenchmarkQuery = new PlantBenchmarkQuery();
-    var jsonFileGlobalResponseList = plantBenchmarkQuery.plantDataList.ToList();
-    var quatedpmcode = string.Empty;
-
-    foreach (var item in jsonFileGlobalResponseList.Where(a => a.kpiCode == request.kpiCode))
-    {
-        var parameters = new PlantQueryParameters
+    var tasks = FileGlobalResponseList
+        .AsParallel()
+        .Where(a => a.kpiCode == request.kpiCode)
+        .Select(async item =>
         {
-            OveralN = item.bestAchievedEver ?? string.Empty,
-            FormattedStartDate = formatedStartdate,
-            FormattedEndDate = formatedEnddate,
-            FormattedStartDateYyyyMmDd = formatedStartdateyymmdd,
-            FormattedEndDateYyyyMmDd = formatedEnddateyymmdd,
-            AffiliateRequest = string.Empty,
-            Request = request,
-            QuotedPmCode = quatedpmcode,
-            PlantIds = formatPlantIds,
-            TemplateIdList = templateIdlist
-        };
-
-        var query = ReplacePlantQuery(parameters);
-
-        var result = await _benchMarkRepository.ExecuteBigDataQuery<PlantBenchmarkGroupedData>(
-            query,
-            reader => new PlantBenchmarkGroupedData
+            var parameters = new AssetQueryParameters
             {
-                plantId = reader["plant_id"] != DBNull.Value ? Convert.ToInt32(reader["plant_id"]) : 0,
-                bestAchievedEver = reader["best_achieved"] != DBNull.Value ? Convert.ToDecimal(reader["best_achieved"]) : 0,
+                OveralN = item.bestAchievedEver ?? string.Empty,
+                FormattedStartDate = formatedStartdate,
+                FormattedEndDate = formatedEnddate,
+                FormattedStartDateYyyyMmDd = formatedStartdateyymmdd,
+                FormattedEndDateYyyyMmDd = formatedEnddateyymmdd,
+                AffiliateRequest = string.Empty,
+                Request = request,
+                QuotedPmCode = quatedpmcode,
+                SapIds = formatSapIds
+            };
+            var queryBestAchievedEver = ReplaceAssetQuery(parameters);
+            var bestAchievedresult = await _benchMarkRepository.ExecuteBigDataQuery<AssetBenchmarkGroupedData>(queryBestAchievedEver, reader => new AssetBenchmarkGroupedData
+            {
+                manufacturer = reader["manufacturer"] != DBNull.Value ? Convert.ToString(reader["manufacturer"]) : "",
+                modelNumber = reader["model_number"] != DBNull.Value ? Convert.ToString(reader["model_number"]) : "",
+                bestAchievedEver = reader["best_achieved_ever"] != DBNull.Value ? Convert.ToDecimal(reader["best_achieved_ever"]) : 0,
                 absolute = reader["absolute"] != DBNull.Value ? Convert.ToDecimal(reader["absolute"]) : 0,
-                actual = reader["actual"] != DBNull.Value ? Convert.ToDecimal(reader["actual"]) : 0
-            }) ?? new List<PlantBenchmarkGroupedData>();
+                actual = reader["actual"] != DBNull.Value ? Convert.ToInt32(reader["actual"]) : 0,
+                sapId = reader["sap_id"] != DBNull.Value ? Convert.ToString(reader["sap_id"])!.TrimStart('0') : "",
 
-        if (result.Count > 0)
-            return result;
-    }
+            }) ?? new List<AssetBenchmarkGroupedData>();
+            return bestAchievedresult;
+        });
+    var bestAchievedresults = await Task.WhenAll(tasks);
+    var groupresultdata = bestAchievedresults.SelectMany(x => x).ToList();
 
-    return new List<PlantBenchmarkGroupedData>();
-}
+    decimal bestAchivedEverMin;
+    decimal bestAchivedForSinglePeriod;
 
-// Helper: Default result
-private static List<PlantBenchmarkGroupedData> CreateDefaultBenchmarkResult()
-{
-    return new List<PlantBenchmarkGroupedData>
-    {
-        new PlantBenchmarkGroupedData
+        if (kpiinfo?.direction == 1)
         {
-            plantId = 0,
-            bestAchievedEver = 0,
-            absolute = 0,
-            actual = 0
+            bestAchivedEverMin = groupresultdata.Min(x => x.bestAchievedEver);
+            bestAchivedForSinglePeriod = groupresultdata.Min(x => x.actual);
         }
-    };
-}
+        else
+        {
+            bestAchivedEverMin = groupresultdata.Max(x => x.bestAchievedEver);
+            bestAchivedForSinglePeriod = groupresultdata.Max(x => x.actual);
+        }
 
-// Helper: Add computed fields
-private static void AddComputedFields(
-    List<PlantBenchmarkGroupedData> groupData,
-    List<KpiDataJsonResponse> sqlKpiDataList,
-    string kpiCode,
-    KpiDataJsonResponse? kpiinfo)
-{
-    decimal bestAchivedEverMin = kpiinfo?.direction == 1 ? groupData.Min(x => x.bestAchievedEver) : groupData.Max(x => x.bestAchievedEver);
-    decimal bestAchivedForSinglePeriod = kpiinfo?.direction == 1 ? groupData.Min(x => x.actual) : groupData.Max(x => x.actual);
+        var sqldirection = sqlKpiDataList.Where(x => x.kpiCode == request.kpiCode).Select(x => x.direction).FirstOrDefault();
+        var targetMax = sqlKpiDataList.Where(x => x.kpiCode == request.kpiCode).Select(x => x.overallTargetMax).FirstOrDefault();
+        foreach (var itemData in groupresultdata)
+        {
 
-    long? sqltarget = sqlKpiDataList.Where(x => x.kpiCode == kpiCode).Select(x => x.overallTargetMax).FirstOrDefault();
-    int? sqldirection = sqlKpiDataList.Where(x => x.kpiCode == kpiCode).Select(x => x.direction).FirstOrDefault();
+          
+           
+            itemData.direction = sqldirection!;
+            itemData.target = (int)(targetMax?? 0);
+            itemData.bestAchievedEverMin = bestAchivedEverMin;
+            itemData.bestAchievedForSinglePeriod = bestAchivedForSinglePeriod;
 
-    foreach (var itemData in groupData)
-    {
-        itemData.bestAchievedEverMin = bestAchivedEverMin;
-        itemData.bestAchievedForSinglePeriod = bestAchivedForSinglePeriod;
-        itemData.target = sqltarget;
-        itemData.direction = sqldirection;
-    }
+        }
+
+    
+    return groupresultdata!;
 }
