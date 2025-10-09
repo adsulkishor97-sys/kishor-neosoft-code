@@ -1,44 +1,17 @@
-private static void AddComputedFields(
-    List<PlantBenchmarkGroupedData> groupData,
-    List<KpiDataJsonResponse> sqlKpiDataList,
-    string kpiCode,
-    KpiDataJsonResponse? kpiinfo)
+class SqlKpiData
 {
-    decimal bestAchivedEverMin, bestAchivedForSinglePeriod;
-
-    if (kpiinfo?.direction == 1)
-    {
-        bestAchivedEverMin = groupData.Min(x => x.bestAchievedEver);
-        bestAchivedForSinglePeriod = groupData.Min(x => x.actual);
-    }
-    else
-    {
-        bestAchivedEverMin = groupData.Max(x => x.bestAchievedEver);
-        bestAchivedForSinglePeriod = groupData.Max(x => x.actual);
-    }
-
-    long? sqltarget = sqlKpiDataList
-        .Where(x => x.kpiCode == kpiCode)
-        .Select(x => x.overallTargetMax)
-        .FirstOrDefault();
-
-    int? sqldirection = sqlKpiDataList
-        .Where(x => x.kpiCode == kpiCode)
-        .Select(x => x.direction)
-        .FirstOrDefault();
-
-    foreach (var itemData in groupData)
-    {
-        itemData.bestAchievedEverMin = bestAchivedEverMin;
-        itemData.bestAchievedForSinglePeriod = bestAchivedForSinglePeriod;
-        itemData.target = sqltarget;
-        itemData.direction = sqldirection;
-    }
+    public string kpiCode { get; set; }
+    public int? direction { get; set; }
+    public long? overallTargetMax { get; set; }
 }
-var sqlKpiDataListJson = await _benchMarkRepository.GetBusinessKPIDetails();
-var sqlKpiDataList = sqlKpiDataListJson.Select(x => new SqlKpiData
+var kpiJsonList = await _benchMarkRepository.GetBusinessKPIDetails();
+var sqlKpiDataList = kpiJsonList.Select(x => new SqlKpiData
 {
     kpiCode = x.kpiCode,
-    overallTargetMax = x.overallTargetMax,
-    direction = x.direction
+    direction = x.direction,
+    overallTargetMax = x.overallTargetMax
 }).ToList();
+
+var kpiinfo = sqlKpiDataList.Find(x => x.kpiCode == request.kpiCode);
+AddComputedFields(groupData, sqlKpiDataList, request.kpiCode, kpiinfo);
+
