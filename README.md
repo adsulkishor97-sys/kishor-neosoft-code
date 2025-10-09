@@ -232,3 +232,11 @@ private async Task<List<BenchmarkGroupedData>> ExecuteAffiliateDataQueryAsync(
         }) ?? new List<BenchmarkGroupedData>();
 }
 
+
+var sqlAffiliateName = (await _benchMarkRepository.GetAffiliateLists())
+    .Select(a => new AffiliateListResponse
+    {
+        affiliateId = a.affiliateId,
+        affiliateName = a.affiliateName
+    }).ToList();
+
