@@ -37,4 +37,24 @@ var query = ReplaceAssetQuery(new AssetQueryParameters
     SapIds = sapIds
 });
 
-ReplaceAssetQuery(item.bestAchievedEver!, formatedStartdate, formatedEnddate, formatedStartdateyymmdd, formatedEnddateyymmdd, "", request, quatedpmcode, formatSapIds);
+
+            var tasks = FileGlobalResponseList
+                .AsParallel()
+                .Where(a => a.kpiCode == request.kpiCode)
+                .Select(async item =>
+                {
+                    var queryBestAchievedEver = ReplaceAssetQuery(item.bestAchievedEver!, formatedStartdate, formatedEnddate, formatedStartdateyymmdd, formatedEnddateyymmdd, "", request, quatedpmcode, formatSapIds);
+                    var bestAchievedresult = await _benchMarkRepository.ExecuteBigDataQuery<AssetBenchmarkGroupedData>(queryBestAchievedEver, reader => new AssetBenchmarkGroupedData
+                    {
+                        manufacturer = reader["manufacturer"] != DBNull.Value ? Convert.ToString(reader["manufacturer"]) : "",
+                        modelNumber = reader["model_number"] != DBNull.Value ? Convert.ToString(reader["model_number"]) : "",
+                        bestAchievedEver = reader["best_achieved_ever"] != DBNull.Value ? Convert.ToDecimal(reader["best_achieved_ever"]) : 0,
+                        absolute = reader["absolute"] != DBNull.Value ? Convert.ToDecimal(reader["absolute"]) : 0,
+                        actual = reader["actual"] != DBNull.Value ? Convert.ToInt32(reader["actual"]) : 0,
+                        sapId = reader["sap_id"] != DBNull.Value ? Convert.ToString(reader["sap_id"])!.TrimStart('0') : "",
+
+                    }) ?? new List<AssetBenchmarkGroupedData>();
+                    return bestAchievedresult;
+
+
+                });
