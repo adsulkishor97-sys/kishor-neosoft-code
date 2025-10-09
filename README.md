@@ -1,236 +1,65 @@
-public async Task<List<BenchmarkGroupedData>> GetAffiliateBenchmark(GetAffiliateBenchmarkRequest request)
+public async Task<List<GetAssetListResponse>> GetAssetList(GetAssetListRequest getAssetListRequest)
 {
-    // Step 1: Prepare dates and basic data
-    var (formattedStartdate, formattedEnddate, formattedStartdateYMD, formattedEnddateYMD) = FormatDatesAffiliate(request);
+    List<GetAssetListResponse> getAssetLIstResponses;
 
-    var sqlKpiDataList = await _benchMarkRepository.GetBusinessKPIDetails();
-    var kpiInfo = sqlKpiDataList.Find(x => x.kpiCode == request.kpiCode);
+    GetAssetListBigDataQuery getAssetLists = new GetAssetListBigDataQuery();
 
-    var sqlAffiliateName = (await _benchMarkRepository.GetAffiliateLists())
-        .Select(a => new AffiliateListResponse
+    var assetListQuery = getAssetLists.assetListQueries.Select(x => x.query).FirstOrDefault();
+    var query=GetAssetListReplaceQuery(assetListQuery!.ToString(), getAssetListRequest);
+
+    List<GetAssetListResponse> bigdataQueryeResult; 
+    List<ProductDetailsBySapIdSpResponse> productDetailsBySapIdSpResponses = new List<ProductDetailsBySapIdSpResponse>();
+   
+        bigdataQueryeResult = await _currentRepository.ExecuteBigDataQuery_New<GetAssetListResponse>(query!, reader => new GetAssetListResponse
         {
-            affiliateId = a.affiliateId,
-            affiliateName = a.affiliateName
-        }).ToList();
+            assetId = reader["asset_id"] != DBNull.Value ? reader["asset_id"].ToString() : "0",
+            sapId = reader["sap_id"] != DBNull.Value ? reader["sap_id"].ToString() : "0",
+            assetName= reader["asset_name"] != DBNull.Value ? reader["asset_name"].ToString() : "0",
+            affiliateId = reader["affiliate_id"] != DBNull.Value ? Convert.ToInt32(reader["affiliate_id"]) : 0,
+            affiliateName = reader["affiliate_name"] != DBNull.Value ? reader["affiliate_name"].ToString() : "0",
+            plantId= reader["plant_id"] != DBNull.Value ? Convert.ToInt32(reader["plant_id"]) : 0,
+            plantName = reader["plant_name"] != DBNull.Value ? reader["plant_name"].ToString() : "0",
+            processServiceName = reader["process_service_name"] != DBNull.Value ? reader["process_service_name"].ToString() : "0",
+            modelNumber= reader["model_number"] != DBNull.Value ? reader["model_number"].ToString() : "0",
+            assetClassId= reader["asset_class_id"] != DBNull.Value ? Convert.ToInt32(reader["asset_class_id"]) :0,
+            designClassificationName= reader["design_classification_name"] != DBNull.Value ? reader["design_classification_name"].ToString() : "0",
+            companyName= reader["company_name"] != DBNull.Value ? reader["company_name"].ToString() : "0",
+            assetClassName= reader["asset_class_name"] != DBNull.Value ? reader["asset_class_name"].ToString() : "0",
 
-    // ✅ Step 1.1: Retrieve affiliate hierarchy (important logic restored)
-    var affiliateHierarchyList = await GetAffiliateHierarchyList(request);
 
-    // Step 2: Process benchmark logic
-    var groupData = await ProcessAffiliateBenchmarkAsync(
-        request,
-        formattedStartdate, formattedEnddate,
-        formattedStartdateYMD, formattedEnddateYMD,
-        sqlKpiDataList, sqlAffiliateName, kpiInfo,
-        affiliateHierarchyList
-    );
 
-    return groupData!;
-}
+        }) ?? new List<GetAssetListResponse>();
 
-#region Helper Methods
 
-private static (string, string, string, string) FormatDatesAffiliate(GetAffiliateBenchmarkRequest request)
-{
-    var startDateTime = DateTime.Parse(request.startDate!, CultureInfo.InvariantCulture);
-    var endDateTime = DateTime.Parse(request.endDate!, CultureInfo.InvariantCulture);
 
-    var formattedStartdate = startDateTime.ToString("yyyyMM");
-    var formattedEnddate = endDateTime.ToString("yyyyMM");
-    var formattedStartdateYMD = startDateTime.ToString("yyyy-MM-dd");
-    var formattedEnddateYMD = endDateTime.ToString("yyyy-MM-dd");
+     
+        var plantIds = string.Join(",", bigdataQueryeResult!.Select(x => x.plantId).Distinct().Where(plantID => plantID > 0));
+        productDetailsBySapIdSpResponses = await _benchMarkRepository.GetAssetListFromSqlDBAsync(plantIds!);
 
-    return (formattedStartdate, formattedEnddate, formattedStartdateYMD, formattedEnddateYMD);
-}
+   
 
-private async Task<List<GetCaseHierarchyResponse>> GetAffiliateHierarchyList(GetAffiliateBenchmarkRequest request)
-{
-    var affiliateIds = request.affiliateId?.Split(',').Select(int.Parse).ToList() ?? new List<int>();
-    var affiliateList = new List<GetCaseHierarchyResponse>();
-
-    foreach (var id in affiliateIds)
+    getAssetLIstResponses = bigdataQueryeResult.Select(b =>
     {
-        var plants = await _benchMarkRepository.GetCaseHierarchyAsync(id);
-        affiliateList.AddRange(plants);
-    }
 
-    return affiliateList;
-}
-
-private async Task<List<BenchmarkGroupedData>> ProcessAffiliateBenchmarkAsync(
-    GetAffiliateBenchmarkRequest request,
-    string formattedStartdate,
-    string formattedEnddate,
-    string formattedStartdateYMD,
-    string formattedEnddateYMD,
-    List<KpiDataJsonResponse> sqlKpiDataList,
-    List<AffiliateListResponse> sqlAffiliateName,
-    KpiDataJsonResponse? kpiInfo,
-    List<GetCaseHierarchyResponse> affiliateHierarchyList)
-{
-    var affiliateBenchmarkQuery = new AffiliateBenchmarkQuery();
-    var responseList = affiliateBenchmarkQuery.affiliateDataList
-        .Where(a => a.kpiCode == request.kpiCode)
-        .ToList();
-
-    List<BenchmarkGroupedData> groupData = new();
-
-    foreach (var item in responseList)
-    {
-        groupData = await ExecuteAffiliateBenchmarkQueriesAsync(
-            item,
-            request,
-            formattedStartdate, formattedEnddate,
-            formattedStartdateYMD, formattedEnddateYMD,
-            sqlAffiliateName, sqlKpiDataList, kpiInfo,
-            affiliateHierarchyList
-        );
-    }
-
-    return groupData;
-}
-
-private async Task<List<BenchmarkGroupedData>> ExecuteAffiliateBenchmarkQueriesAsync(
-    AffiliateBenchmark item,
-    GetAffiliateBenchmarkRequest request,
-    string formattedStartdate,
-    string formattedEnddate,
-    string formattedStartdateYMD,
-    string formattedEnddateYMD,
-    List<AffiliateListResponse> sqlAffiliateName,
-    List<KpiDataJsonResponse> sqlKpiDataList,
-    KpiDataJsonResponse? kpiInfo,
-    List<GetCaseHierarchyResponse> affiliateHierarchyList)
-{
-    var actualQueryStr = AffilateReplaceQuery(
-        item.query!,
-        formattedStartdateYMD, formattedEnddateYMD,
-        formattedStartdate, formattedEnddate,
-        "",
-        request
-    );
-
-    var bestQueryStr = AffilateReplaceQuery(
-        item.bestAchievedEver!,
-        formattedStartdateYMD, formattedEnddateYMD,
-        formattedStartdate, formattedEnddate,
-        "",
-        request
-    );
-
-    var actualQuery = await ExecuteAffiliateDataQueryAsync(actualQueryStr, sqlAffiliateName);
-    var bestQuery = await ExecuteAffiliateDataQueryAsync(bestQueryStr, sqlAffiliateName, isBest: true);
-
-    if (actualQuery.Count == 0 || bestQueryStr.Length == 0)
-        return new List<BenchmarkGroupedData>();
-
-    var mergedData = MergeAffiliateBenchmarkData(actualQuery, bestQuery);
-
-    UpdateComputedFields(mergedData, sqlKpiDataList, kpiInfo, request.kpiCode);
-
-    return mergedData;
-}
-
-private async Task<List<BenchmarkGroupedData>> ExecuteAffiliateDataQueryAsync(
-    string query,
-    List<AffiliateListResponse> sqlAffiliateName,
-    bool isBest = false)
-{
-    return await _benchMarkRepository.ExecuteBigDataQuery<BenchmarkGroupedData>(
-        query,
-        reader =>
+        var productDetails = productDetailsBySapIdSpResponses.Find(p => p.plantId == b.plantId);
+        return new GetAssetListResponse
         {
-            int affiliateId = GetValueOrDefault(reader, "affiliate_id", 0);
-            string? affiliateName = sqlAffiliateName.Find(x => x.affiliateId == affiliateId)?.affiliateName;
-
-            return isBest
-                ? new BenchmarkGroupedData
-                {
-                    affiliateName = affiliateName,
-                    bestAchievedEver = GetValueOrDefault(reader, "best_achieved", 0m)
-                }
-                : new BenchmarkGroupedData
-                {
-                    affiliateName = affiliateName,
-                    actual = GetValueOrDefault(reader, "actual", 0m),
-                    absolute = GetValueOrDefault(reader, "absolute", 0m)
-                };
-        }) ?? new List<BenchmarkGroupedData>();
+            assetId = b.assetId,
+            sapId = b.sapId?.Trim(),
+            assetName = b.assetName?.Trim(),
+            affiliateId = b.affiliateId,
+            affiliateName = b.affiliateName?.Trim(),
+            productId = productDetails?.productId ?? 0,
+            plantId = b.plantId,
+            plantName = b.plantName?.Trim(),
+            processServiceName = b.processServiceName?.Trim(),
+            modelNumber = b.modelNumber?.Trim(),
+            assetClassId = b.assetClassId,
+            designClassificationName = b.designClassificationName?.Trim(),
+            companyName = b.companyName?.Trim(),
+            assetClassName = b.assetClassName?.Trim()
+        };
+    }).ToList();
+   
+    return getAssetLIstResponses!;
 }
-
-private static List<BenchmarkGroupedData> MergeAffiliateBenchmarkData(
-    List<BenchmarkGroupedData> actualData,
-    List<BenchmarkGroupedData> bestData)
-{
-    return (from a in actualData
-            join b in bestData on a.affiliateName equals b.affiliateName into temp
-            from b in temp.DefaultIfEmpty()
-            select new BenchmarkGroupedData
-            {
-                affiliateName = a.affiliateName,
-                actual = a.actual,
-                absolute = a.absolute,
-                bestAchievedEver = b?.bestAchievedEver ?? 0
-            })
-           .GroupBy(x => x.affiliateName)
-           .Select(g => new BenchmarkGroupedData
-           {
-               affiliateName = g.Key,
-               actual = g.Sum(x => x.actual),
-               absolute = g.Sum(x => x.absolute),
-               bestAchievedEver = g.Max(x => x.bestAchievedEver)
-           })
-           .ToList();
-}
-
-private static void UpdateComputedFields(
-    List<BenchmarkGroupedData> groupData,
-    List<KpiDataJsonResponse> sqlKpiDataList,
-    KpiDataJsonResponse? kpiInfo,
-    string kpiCode)
-{
-    decimal bestAchievedEverMin, bestAchievedForSinglePeriod;
-
-    if (kpiInfo?.direction == 1)
-    {
-        bestAchievedEverMin = groupData.Any() ? groupData.Min(x => x.bestAchievedEver) : 0;
-        bestAchievedForSinglePeriod = groupData.Any() ? groupData.Min(x => x.actual) : 0;
-    }
-    else
-    {
-        bestAchievedEverMin = groupData.Any() ? groupData.Max(x => x.bestAchievedEver) : 0;
-        bestAchievedForSinglePeriod = groupData.Any() ? groupData.Max(x => x.actual) : 0;
-    }
-
-    var sqlDirection = sqlKpiDataList.FirstOrDefault(x => x.kpiCode == kpiCode)?.direction;
-    var targetMin = sqlKpiDataList.FirstOrDefault(x => x.kpiCode == kpiCode)?.overallTargetMin;
-    var targetMax = sqlKpiDataList.FirstOrDefault(x => x.kpiCode == kpiCode)?.overallTargetMax;
-
-    foreach (var item in groupData)
-    {
-        item.state = (item.actual >= targetMin && item.actual <= targetMax) ? 1 : 0;
-        item.direction = sqlDirection;
-        item.target = targetMax ?? 0;
-        item.bestAchievedEverMin = bestAchievedEverMin;
-        item.bestAchievedForSinglePeriod = bestAchievedForSinglePeriod;
-    }
-}
-
-private static T GetValueOrDefault<T>(IDataRecord reader, string columnName, T defaultValue = default!)
-{
-    try
-    {
-        int ordinal = reader.GetOrdinal(columnName);
-        return reader.IsDBNull(ordinal) ? defaultValue : (T)Convert.ChangeType(reader.GetValue(ordinal), typeof(T));
-    }
-    catch (IndexOutOfRangeException)
-    {
-        return defaultValue;
-    }
-    catch (InvalidCastException)
-    {
-        return defaultValue;
-    }
-}
-
-#endregion
