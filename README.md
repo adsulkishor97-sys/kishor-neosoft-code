@@ -1,42 +1,39 @@
- public static string ReplaceAssetQuery(string overalN, string formatedStartdate, string formatedEnddate, string formatedStartdateyymmdd, string formatedEnddateyymmdd, string affiliateRequest1, GetAssetBenchmarkRequest request, string quatedpmcode, string sapIds)
- {
-     var query = overalN!
-                     .Replace("StartDateyyyymmdd", formatedStartdateyymmdd)
-                     .Replace("EndDateyyyymmdd", formatedEnddateyymmdd)
-                     .Replace("affiliateRequest", affiliateRequest1)
-                     .Replace("${startDateyyyymm}", "'" + formatedStartdate + "'")
-                     .Replace("${endDateyyyymm}", "'" + formatedEnddate + "'")
-                     .Replace("${startDate}", "'" + formatedStartdate + "'")
-                     .Replace("${endDate}", "'" + formatedEnddate + "'")
+public class AssetQueryParameters
+{
+    public string OveralN { get; set; } = string.Empty;
+    public string FormattedStartDate { get; set; } = string.Empty;
+    public string FormattedEndDate { get; set; } = string.Empty;
+    public string FormattedStartDateYyyyMmDd { get; set; } = string.Empty;
+    public string FormattedEndDateYyyyMmDd { get; set; } = string.Empty;
+    public string AffiliateRequest { get; set; } = string.Empty;
+    public GetAssetBenchmarkRequest Request { get; set; } = default!;
+    public string QuotedPmCode { get; set; } = string.Empty;
+    public string SapIds { get; set; } = string.Empty;
+}
+public static string ReplaceAssetQuery(AssetQueryParameters parameters)
+{
+    var query = parameters.OveralN!
+        .Replace("StartDateyyyymmdd", parameters.FormattedStartDateYyyyMmDd)
+        .Replace("EndDateyyyymmdd", parameters.FormattedEndDateYyyyMmDd)
+        .Replace("affiliateRequest", parameters.AffiliateRequest)
+        .Replace("${startDateyyyymm}", $"'{parameters.FormattedStartDate}'")
+        .Replace("${endDateyyyymm}", $"'{parameters.FormattedEndDate}'")
+        .Replace("${startDate}", $"'{parameters.FormattedStartDate}'")
+        .Replace("${endDate}", $"'{parameters.FormattedEndDate}'")
+        .Replace("${sapId}", parameters.SapIds);
 
-                     .Replace("${sapId}",   sapIds );
-                     
-     return query;
- }
-  public static string ReplacePlantQuery(string overalN, string formatedStartdate, string formatedEnddate,string formatedStartdateyymmdd,string formatedEnddateyymmdd, string affiliateRequest1, GetPlantBenchmarkRequest request, string quatedpmcode, string plantIds, string templateIdlist)
- {
-
-
-     var query = overalN!
-                    
-                     .Replace("affiliateRequest1", affiliateRequest1)
-                     .Replace("StartDateyyyymmdd", formatedStartdateyymmdd)
-                     .Replace("EndDateyyyymmdd", formatedEnddateyymmdd)
-                     .Replace("affiliateRequest", affiliateRequest1)
-                     .Replace("${plantIdList}", request.plantId)
-                     .Replace("plantIdList", request.plantId)
-                     .Replace("StartDateyyyymm", formatedStartdate)
-                     .Replace("${startDateyyyymm}", "'" + formatedStartdate + "'")
-                     .Replace("${endDateyyyymm}", "'" + formatedEnddate + "'")
-                     .Replace("EndDateyyyymm", formatedEnddate)
-                     .Replace("quatedpmcode", quatedpmcode)
-                     .Replace("${templateId}", templateIdlist)
-                     .Replace("${startDate}", "'" + formatedStartdate + "'")
-                     .Replace("${endDate}", "'" + formatedEnddate + "'");
-
-
-     return query;
- }
- Method has 10 parameters, which is greater than the 7 authorized.
-
+    return query;
+}
+var query = ReplaceAssetQuery(new AssetQueryParameters
+{
+    OveralN = overalN,
+    FormattedStartDate = startDate,
+    FormattedEndDate = endDate,
+    FormattedStartDateYyyyMmDd = startYyyymmdd,
+    FormattedEndDateYyyyMmDd = endYyyymmdd,
+    AffiliateRequest = affiliateRequest,
+    Request = assetRequest,
+    QuotedPmCode = pmCode,
+    SapIds = sapIds
+});
 
