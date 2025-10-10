@@ -76,3 +76,17 @@
             
             return groupresultdata!;
         }
+private static string ReplaceAssetQuery(AssetQueryParameters parameters)
+{
+    var query = parameters.overalN!
+        .Replace("StartDateyyyymmdd", parameters.formattedStartDateYyyyMmDd)
+        .Replace("EndDateyyyymmdd", parameters.formattedEndDateYyyyMmDd)
+        .Replace("affiliateRequest", parameters.affiliateRequest)
+        .Replace("${startDateyyyymm}", $"'{parameters.formattedStartDate}'")
+        .Replace("${endDateyyyymm}", $"'{parameters.formattedEndDate}'")
+        .Replace("${startDate}", $"'{parameters.formattedStartDate}'")
+        .Replace("${endDate}", $"'{parameters.formattedEndDate}'")
+        .Replace("${sapId}", parameters.sapIds);
+
+    return query;
+}
