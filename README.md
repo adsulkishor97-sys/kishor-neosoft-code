@@ -1,4 +1,3 @@
- if (!groupresultdata.Any())
-
-Prefer comparing 'Count' to 0 rather than using 'Any()', both for clarity and for performance
+var targetMax = sqlKpiDataList.FirstOrDefault(x => x.kpiCode == kpiCode)?.overallTargetMax;
+"Find" method should be used instead of the "FirstOrDefault" extension method.
 
