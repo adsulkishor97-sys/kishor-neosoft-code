@@ -1,50 +1,71 @@
 private async Task<List<AssetBenchmarkGroupedData>> GetAssetBenchmarkDataAsync(
     GetAssetBenchmarkRequest request,
-    string formatedStartdate,
-    string formatedEnddate,
-    string formatedStartdateyymmdd,
-    string formatedEnddateyymmdd,
-    string formatSapIds,
-    string quatedpmcode)
+    AssetBenchmarkQueryContext context)
 {
     var assetBenchmarkQuery = new AssetBenchmarkQuery();
-    var FileGlobalResponseList = assetBenchmarkQuery.plantDataList.ToList();
+    var plantDataList = assetBenchmarkQuery.plantDataList
+        .Where(p => p.kpiCode == request.kpiCode)
+        .ToList();
 
-    var tasks = FileGlobalResponseList
-        .AsParallel()
-        .Where(a => a.kpiCode == request.kpiCode)
-        .Select(async item =>
-        {
-            var parameters = new AssetQueryParameters
-            {
-                overalN = item.bestAchievedEver ?? string.Empty,
-                formattedStartDate = formatedStartdate,
-                formattedEndDate = formatedEnddate,
-                formattedStartDateYyyyMmDd = formatedStartdateyymmdd,
-                formattedEndDateYyyyMmDd = formatedEnddateyymmdd,
-                affiliateRequest = string.Empty,
-                request = request,
-                quotedPmCode = quatedpmcode,
-                sapIds = formatSapIds
-            };
+    var tasks = plantDataList.Select(item => ExecuteSinglePlantQueryAsync(item, request, context));
+    var results = await Task.WhenAll(tasks);
 
-            var query = ReplaceAssetQuery(parameters);
-
-            return await _benchMarkRepository.ExecuteBigDataQuery<AssetBenchmarkGroupedData>(
-                query,
-                reader => new AssetBenchmarkGroupedData
-                {
-                    manufacturer = reader["manufacturer"] != DBNull.Value ? Convert.ToString(reader["manufacturer"]) : "",
-                    modelNumber = reader["model_number"] != DBNull.Value ? Convert.ToString(reader["model_number"]) : "",
-                    bestAchievedEver = reader["best_achieved_ever"] != DBNull.Value ? Convert.ToDecimal(reader["best_achieved_ever"]) : 0,
-                    absolute = reader["absolute"] != DBNull.Value ? Convert.ToDecimal(reader["absolute"]) : 0,
-                    actual = reader["actual"] != DBNull.Value ? Convert.ToInt32(reader["actual"]) : 0,
-                    sapId = reader["sap_id"] != DBNull.Value ? Convert.ToString(reader["sap_id"])!.TrimStart('0') : "",
-                }) ?? new List<AssetBenchmarkGroupedData>();
-        });
-
-    var bestAchievedResults = await Task.WhenAll(tasks);
-    return bestAchievedResults.SelectMany(x => x).ToList();
+    return results.SelectMany(x => x).ToList();
 }
-Refactor this method to reduce its Cognitive Complexity from 18 to the 15 allowed.
 
+private async Task<List<AssetBenchmarkGroupedData>> ExecuteSinglePlantQueryAsync(
+    AssetBenchmarkPlantData item,
+    GetAssetBenchmarkRequest request,
+    AssetBenchmarkQueryContext context)
+{
+    var queryParams = CreateQueryParameters(item, request, context);
+    var query = ReplaceAssetQuery(queryParams);
+
+    return await _benchMarkRepository.ExecuteBigDataQuery<AssetBenchmarkGroupedData>(
+        query,
+        MapToAssetBenchmarkGroupedData
+    ) ?? new List<AssetBenchmarkGroupedData>();
+}
+
+private static AssetQueryParameters CreateQueryParameters(
+    AssetBenchmarkPlantData item,
+    GetAssetBenchmarkRequest request,
+    AssetBenchmarkQueryContext context)
+{
+    return new AssetQueryParameters
+    {
+        overalN = item.bestAchievedEver ?? string.Empty,
+        formattedStartDate = context.FormattedStartDate,
+        formattedEndDate = context.FormattedEndDate,
+        formattedStartDateYyyyMmDd = context.FormattedStartDateYMD,
+        formattedEndDateYyyyMmDd = context.FormattedEndDateYMD,
+        affiliateRequest = string.Empty,
+        request = request,
+        quotedPmCode = context.QuotedPmCode,
+        sapIds = context.SapIds
+    };
+}
+
+private static AssetBenchmarkGroupedData MapToAssetBenchmarkGroupedData(DbDataReader reader)
+{
+    return new AssetBenchmarkGroupedData
+    {
+        manufacturer = reader["manufacturer"] != DBNull.Value ? Convert.ToString(reader["manufacturer"]) : "",
+        modelNumber = reader["model_number"] != DBNull.Value ? Convert.ToString(reader["model_number"]) : "",
+        bestAchievedEver = reader["best_achieved_ever"] != DBNull.Value ? Convert.ToDecimal(reader["best_achieved_ever"]) : 0,
+        absolute = reader["absolute"] != DBNull.Value ? Convert.ToDecimal(reader["absolute"]) : 0,
+        actual = reader["actual"] != DBNull.Value ? Convert.ToInt32(reader["actual"]) : 0,
+        sapId = reader["sap_id"] != DBNull.Value ? Convert.ToString(reader["sap_id"])!.TrimStart('0') : "",
+    };
+}
+
+// Helper DTO to wrap method parameters
+public class AssetBenchmarkQueryContext
+{
+    public string FormattedStartDate { get; set; } = "";
+    public string FormattedEndDate { get; set; } = "";
+    public string FormattedStartDateYMD { get; set; } = "";
+    public string FormattedEndDateYMD { get; set; } = "";
+    public string SapIds { get; set; } = "";
+    public string QuotedPmCode { get; set; } = "";
+}
