@@ -1,67 +1,50 @@
-public async Task<List<GetAssetListResponse>> GetAssetList(GetAssetListRequest request)
+private async Task<List<AssetBenchmarkGroupedData>> GetAssetBenchmarkDataAsync(
+    GetAssetBenchmarkRequest request,
+    string formatedStartdate,
+    string formatedEnddate,
+    string formatedStartdateyymmdd,
+    string formatedEnddateyymmdd,
+    string formatSapIds,
+    string quatedpmcode)
 {
-    // 1. Get base query
-    var getAssetLists = new GetAssetListBigDataQuery();
-    var assetListQuery = getAssetLists.assetListQueries.Select(x => x.query).FirstOrDefault();
-    var query = GetAssetListReplaceQuery(assetListQuery!, request);
+    var assetBenchmarkQuery = new AssetBenchmarkQuery();
+    var FileGlobalResponseList = assetBenchmarkQuery.plantDataList.ToList();
 
-    // 2. Execute BigData query and map to GetAssetListResponse
-    var bigDataResults = await _currentRepository.ExecuteBigDataQuery_New<GetAssetListResponse>(
-        query!,
-        MapReaderToAssetResponse
-    ) ?? new List<GetAssetListResponse>();
+    var tasks = FileGlobalResponseList
+        .AsParallel()
+        .Where(a => a.kpiCode == request.kpiCode)
+        .Select(async item =>
+        {
+            var parameters = new AssetQueryParameters
+            {
+                overalN = item.bestAchievedEver ?? string.Empty,
+                formattedStartDate = formatedStartdate,
+                formattedEndDate = formatedEnddate,
+                formattedStartDateYyyyMmDd = formatedStartdateyymmdd,
+                formattedEndDateYyyyMmDd = formatedEnddateyymmdd,
+                affiliateRequest = string.Empty,
+                request = request,
+                quotedPmCode = quatedpmcode,
+                sapIds = formatSapIds
+            };
 
-    // 3. Get plantIds for secondary query
-    var plantIds = string.Join(",", bigDataResults.Select(x => x.plantId).Distinct().Where(id => id > 0));
-    var productDetails = await _benchMarkRepository.GetAssetListFromSqlDBAsync(plantIds!);
+            var query = ReplaceAssetQuery(parameters);
 
-    // 4. Merge BigData results with ProductDetails
-    var finalResult = bigDataResults.Select(b => MergeWithProductDetails(b, productDetails)).ToList();
+            return await _benchMarkRepository.ExecuteBigDataQuery<AssetBenchmarkGroupedData>(
+                query,
+                reader => new AssetBenchmarkGroupedData
+                {
+                    manufacturer = reader["manufacturer"] != DBNull.Value ? Convert.ToString(reader["manufacturer"]) : "",
+                    modelNumber = reader["model_number"] != DBNull.Value ? Convert.ToString(reader["model_number"]) : "",
+                    bestAchievedEver = reader["best_achieved_ever"] != DBNull.Value ? Convert.ToDecimal(reader["best_achieved_ever"]) : 0,
+                    absolute = reader["absolute"] != DBNull.Value ? Convert.ToDecimal(reader["absolute"]) : 0,
+                    actual = reader["actual"] != DBNull.Value ? Convert.ToInt32(reader["actual"]) : 0,
+                    sapId = reader["sap_id"] != DBNull.Value ? Convert.ToString(reader["sap_id"])!.TrimStart('0') : "",
+                }) ?? new List<AssetBenchmarkGroupedData>();
+        });
 
-    return finalResult;
+    var bestAchievedResults = await Task.WhenAll(tasks);
+    return bestAchievedResults.SelectMany(x => x).ToList();
 }
+Refactor this method to reduce its Cognitive Complexity from 18 to the 15 allowed.
 
-// Helper: Map SQL reader to GetAssetListResponse
-private GetAssetListResponse MapReaderToAssetResponse(IDataReader reader)
-{
-    return new GetAssetListResponse
-    {
-        assetId = reader["asset_id"]?.ToString() ?? "0",
-        sapId = reader["sap_id"]?.ToString() ?? "0",
-        assetName = reader["asset_name"]?.ToString() ?? "0",
-        affiliateId = reader["affiliate_id"] != DBNull.Value ? Convert.ToInt32(reader["affiliate_id"]) : 0,
-        affiliateName = reader["affiliate_name"]?.ToString() ?? "0",
-        plantId = reader["plant_id"] != DBNull.Value ? Convert.ToInt32(reader["plant_id"]) : 0,
-        plantName = reader["plant_name"]?.ToString() ?? "0",
-        processServiceName = reader["process_service_name"]?.ToString() ?? "0",
-        modelNumber = reader["model_number"]?.ToString() ?? "0",
-        assetClassId = reader["asset_class_id"] != DBNull.Value ? Convert.ToInt32(reader["asset_class_id"]) : 0,
-        designClassificationName = reader["design_classification_name"]?.ToString() ?? "0",
-        companyName = reader["company_name"]?.ToString() ?? "0",
-        assetClassName = reader["asset_class_name"]?.ToString() ?? "0",
-    };
-}
-
-// Helper: Merge BigData result with ProductDetails
-private GetAssetListResponse MergeWithProductDetails(GetAssetListResponse asset, List<ProductDetailsBySapIdSpResponse> productDetails)
-{
-    var product = productDetails.Find(p => p.plantId == asset.plantId);
-
-    return new GetAssetListResponse
-    {
-        assetId = asset.assetId,
-        sapId = asset.sapId?.Trim(),
-        assetName = asset.assetName?.Trim(),
-        affiliateId = asset.affiliateId,
-        affiliateName = asset.affiliateName?.Trim(),
-        productId = product?.productId ?? 0,
-        plantId = asset.plantId,
-        plantName = asset.plantName?.Trim(),
-        processServiceName = asset.processServiceName?.Trim(),
-        modelNumber = asset.modelNumber?.Trim(),
-        assetClassId = asset.assetClassId,
-        designClassificationName = asset.designClassificationName?.Trim(),
-        companyName = asset.companyName?.Trim(),
-        assetClassName = asset.assetClassName?.Trim()
-    };
-}
