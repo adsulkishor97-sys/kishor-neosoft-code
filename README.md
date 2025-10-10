@@ -1,12 +1,15 @@
 public async Task<GetTotalCostOfOwnershipResponse> GetTotalCostOfOwnershipByPlantIdAsync(GetTotalCostOfOwnershipRequestByplantId request)
 {
+    if (request == null)
+        throw new ArgumentNullException(nameof(request), "Request cannot be null");
+
     // Step 1: Format dates
-    var (formattedStartDate, formattedEndDate, startMonth, endMonth) = FormatTcoDates(request?.startDate, request?.endDate);
+    var (formattedStartDate, formattedEndDate, startMonth, endMonth) = FormatTcoDates(request.startDate, request.endDate);
 
     // Step 2: Get raw TCO data
-    var rawResponses = await GetRawTcoDataAsync(request?.plantId, formattedStartDate, formattedEndDate, startMonth, endMonth);
+    var rawResponses = await GetRawTcoDataAsync(request.plantId, formattedStartDate, formattedEndDate, startMonth, endMonth);
 
-    // Step 3: Aggregate and compute percentages
+    // Step 3: Aggregate and compute totals & percentages
     var finalResponse = ComputeTcoTotals(rawResponses);
 
     return finalResponse;
@@ -16,49 +19,45 @@ public async Task<GetTotalCostOfOwnershipResponse> GetTotalCostOfOwnershipByPlan
 
 private static (string formattedStartDate, string formattedEndDate, string startMonth, string endMonth) FormatTcoDates(string? startDate, string? endDate)
 {
-    var start = !string.IsNullOrEmpty(startDate) ? DateTime.Parse(startDate, CultureInfo.InvariantCulture) : DateTime.Now;
-    var end = !string.IsNullOrEmpty(endDate) ? DateTime.Parse(endDate, CultureInfo.InvariantCulture) : DateTime.Now;
+    var startDateTime = !string.IsNullOrEmpty(startDate) ? DateTime.Parse(startDate, CultureInfo.InvariantCulture) : DateTime.Now;
+    var endDateTime = !string.IsNullOrEmpty(endDate) ? DateTime.Parse(endDate, CultureInfo.InvariantCulture) : DateTime.Now;
 
     return (
-        start.ToString("yyyy-MM-dd"),
-        end.ToString("yyyy-MM-dd"),
-        start.ToString("yyyyMM"),
-        end.ToString("yyyyMM")
+        startDateTime.ToString("yyyy-MM-dd"),
+        endDateTime.ToString("yyyy-MM-dd"),
+        startDateTime.ToString("yyyyMM"),
+        endDateTime.ToString("yyyyMM")
     );
 }
 
-private async Task<List<GetTotalCostOfOwnershipResponse>> GetRawTcoDataAsync(string? plantId, string formattedStartDate, string formattedEndDate, string startMonth, string endMonth)
+private async Task<List<GetTotalCostOfOwnershipResponse>> GetRawTcoDataAsync(string plantId, string formattedStartDate, string formattedEndDate, string startMonth, string endMonth)
 {
-    var tcoData = new AffiliateTcoByPlantId();
-    var responses = new List<GetTotalCostOfOwnershipResponse>();
+    var responseList = new List<GetTotalCostOfOwnershipResponse>();
+    var affiliateTco = new AffiliateTcoByPlantId();
 
-    foreach (var item in tcoData.totalCostOfOwnerships)
+    foreach (var item in affiliateTco.totalCostOfOwnerships)
     {
         var query = ReplaceTcoQuery(item.query!, plantId, formattedStartDate, formattedEndDate, startMonth, endMonth);
 
         var result = await _currentRepository.ExecuteBigDataQuery_New<GetTotalCostOfOwnershipResponse>(query, reader => new GetTotalCostOfOwnershipResponse
         {
-            maintenance = SafeGetDecimal(reader, "maintenance"),
-            disposal = SafeGetDecimal(reader, "disposal"),
-            acquisition = SafeGetDecimal(reader, "acquisition"),
-            operation = SafeGetDecimal(reader, "operation"),
-            productionLoss = SafeGetDecimal(reader, "production_loss")
-        });
+            maintenance = reader["maintenance"] != DBNull.Value ? Convert.ToDecimal(reader["maintenance"]) : 0,
+            disposal = reader["disposal"] != DBNull.Value ? Convert.ToDecimal(reader["disposal"]) : 0,
+            acquisition = reader["acquisition"] != DBNull.Value ? Convert.ToDecimal(reader["acquisition"]) : 0,
+            operation = reader["operation"] != DBNull.Value ? Convert.ToDecimal(reader["operation"]) : 0,
+            productionLoss = reader["production_loss"] != DBNull.Value ? Convert.ToDecimal(reader["production_loss"]) : 0
+        }) ?? new List<GetTotalCostOfOwnershipResponse>();
 
-        if (result != null && result.Any())
-            responses.AddRange(result);
+        responseList.AddRange(result);
     }
 
-    return responses;
+    return responseList;
 }
 
-private static decimal SafeGetDecimal(IDataReader reader, string column)
-    => reader[column] != DBNull.Value ? Convert.ToDecimal(reader[column]) : 0;
-
-private static string ReplaceTcoQuery(string query, string? plantId, string formattedStartDate, string formattedEndDate, string startMonth, string endMonth)
+private static string ReplaceTcoQuery(string query, string plantId, string formattedStartDate, string formattedEndDate, string startMonth, string endMonth)
 {
     return query
-        .Replace("plantId", plantId ?? "")
+        .Replace("plantId", plantId)
         .Replace("startDate", formattedStartDate)
         .Replace("endDate", formattedEndDate)
         .Replace("formatedStartdate", startMonth)
