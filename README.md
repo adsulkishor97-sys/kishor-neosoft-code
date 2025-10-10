@@ -1,56 +1,85 @@
 public async Task<GetTotalCostOfOwnershipResponse> GetTotalCostOfOwnershipByPlantIdAsync(GetTotalCostOfOwnershipRequestByplantId request)
 {
+    // Step 1: Format dates
+    var (formattedStartDate, formattedEndDate, startMonth, endMonth) = FormatTcoDates(request?.startDate, request?.endDate);
 
-    var plantId = request?.plantId;
-    //here get  json file data           
-    var startDateTime = request?.startDate != null ? DateTime.Parse(request.startDate, CultureInfo.InvariantCulture) : DateTime.Now;
-    var endDateTime = request?.endDate != null ? DateTime.Parse(request.endDate, CultureInfo.InvariantCulture) : DateTime.Now;
-    //convert format as yyyy-mm-dd 2025-08-01
-    var formatedStartdate = startDateTime.ToString("yyyy-MM-dd");
-    var formatedEnddate = endDateTime.ToString("yyyy-MM-dd");
-    //convert format as yyyymm 202508
-    var startDateMonth = startDateTime.ToString("yyyyMM");
-    var endDateMonth = endDateTime.ToString("yyyyMM");
-    List<GetTotalCostOfOwnershipResponse> response = new List<GetTotalCostOfOwnershipResponse>();
-    AffiliateTcoByPlantId affiliateTcoByPlantId = new AffiliateTcoByPlantId();
-    foreach (var item in affiliateTcoByPlantId.totalCostOfOwnerships)
+    // Step 2: Get raw TCO data
+    var rawResponses = await GetRawTcoDataAsync(request?.plantId, formattedStartDate, formattedEndDate, startMonth, endMonth);
+
+    // Step 3: Aggregate and compute percentages
+    var finalResponse = ComputeTcoTotals(rawResponses);
+
+    return finalResponse;
+}
+
+#region Private Helpers
+
+private static (string formattedStartDate, string formattedEndDate, string startMonth, string endMonth) FormatTcoDates(string? startDate, string? endDate)
+{
+    var start = !string.IsNullOrEmpty(startDate) ? DateTime.Parse(startDate, CultureInfo.InvariantCulture) : DateTime.Now;
+    var end = !string.IsNullOrEmpty(endDate) ? DateTime.Parse(endDate, CultureInfo.InvariantCulture) : DateTime.Now;
+
+    return (
+        start.ToString("yyyy-MM-dd"),
+        end.ToString("yyyy-MM-dd"),
+        start.ToString("yyyyMM"),
+        end.ToString("yyyyMM")
+    );
+}
+
+private async Task<List<GetTotalCostOfOwnershipResponse>> GetRawTcoDataAsync(string? plantId, string formattedStartDate, string formattedEndDate, string startMonth, string endMonth)
+{
+    var tcoData = new AffiliateTcoByPlantId();
+    var responses = new List<GetTotalCostOfOwnershipResponse>();
+
+    foreach (var item in tcoData.totalCostOfOwnerships)
     {
-        var query = item.query!
-           .Replace("plantId", plantId.ToString())
-            .Replace("startDate", formatedStartdate)
-            .Replace("endDate", formatedEnddate)
-            .Replace("formatedStartdate", startDateMonth)
-            .Replace("formatedEnddate", endDateMonth);
+        var query = ReplaceTcoQuery(item.query!, plantId, formattedStartDate, formattedEndDate, startMonth, endMonth);
 
-
-
-        response = await _currentRepository.ExecuteBigDataQuery_New<GetTotalCostOfOwnershipResponse>(query, reader => new GetTotalCostOfOwnershipResponse
+        var result = await _currentRepository.ExecuteBigDataQuery_New<GetTotalCostOfOwnershipResponse>(query, reader => new GetTotalCostOfOwnershipResponse
         {
-            maintenance = reader["maintenance"] != DBNull.Value ? Convert.ToDecimal(reader["maintenance"]) : 0,
-            disposal = reader["disposal"] != DBNull.Value ? Convert.ToDecimal(reader["disposal"]) : 0,
-            acquisition = reader["acquisition"] != DBNull.Value ? Convert.ToDecimal(reader["acquisition"]) : 0,
-            operation = reader["operation"] != DBNull.Value ? Convert.ToDecimal(reader["operation"]) : 0,
-            productionLoss = reader["production_loss"] != DBNull.Value ? Convert.ToDecimal(reader["production_loss"]) : 0,
+            maintenance = SafeGetDecimal(reader, "maintenance"),
+            disposal = SafeGetDecimal(reader, "disposal"),
+            acquisition = SafeGetDecimal(reader, "acquisition"),
+            operation = SafeGetDecimal(reader, "operation"),
+            productionLoss = SafeGetDecimal(reader, "production_loss")
+        });
 
-
-
-        }) ?? new List<GetTotalCostOfOwnershipResponse>();
+        if (result != null && result.Any())
+            responses.AddRange(result);
     }
+
+    return responses;
+}
+
+private static decimal SafeGetDecimal(IDataReader reader, string column)
+    => reader[column] != DBNull.Value ? Convert.ToDecimal(reader[column]) : 0;
+
+private static string ReplaceTcoQuery(string query, string? plantId, string formattedStartDate, string formattedEndDate, string startMonth, string endMonth)
+{
+    return query
+        .Replace("plantId", plantId ?? "")
+        .Replace("startDate", formattedStartDate)
+        .Replace("endDate", formattedEndDate)
+        .Replace("formatedStartdate", startMonth)
+        .Replace("formatedEnddate", endMonth);
+}
+
+private static GetTotalCostOfOwnershipResponse ComputeTcoTotals(List<GetTotalCostOfOwnershipResponse> responses)
+{
+    var first = responses.FirstOrDefault() ?? new GetTotalCostOfOwnershipResponse();
+
     var finalResponse = new GetTotalCostOfOwnershipResponse
     {
-        maintenance = Math.Round(response.FirstOrDefault()?.maintenance ?? 0, 0),
-        disposal = Math.Round(response.FirstOrDefault()?.disposal ?? 0, 0),
-        acquisition = Math.Round(response.FirstOrDefault()?.acquisition ?? 0, 0),
-        operation = Math.Round(response.FirstOrDefault()?.operation ?? 0, 0),
-        productionLoss = Math.Round(response.FirstOrDefault()?.productionLoss ?? 0, 0)
-
-
-
+        maintenance = Math.Round(first.maintenance, 0),
+        disposal = Math.Round(first.disposal, 0),
+        acquisition = Math.Round(first.acquisition, 0),
+        operation = Math.Round(first.operation, 0),
+        productionLoss = Math.Round(first.productionLoss, 0)
     };
 
     finalResponse.total = finalResponse.maintenance + finalResponse.disposal + finalResponse.acquisition + finalResponse.operation + finalResponse.productionLoss;
     finalResponse.totalAssetOperation = finalResponse.productionLoss + finalResponse.operation + finalResponse.maintenance;
-
 
     if (finalResponse.total > 0)
     {
@@ -60,5 +89,8 @@ public async Task<GetTotalCostOfOwnershipResponse> GetTotalCostOfOwnershipByPlan
         finalResponse.operationPercent = Math.Round((finalResponse.operation / finalResponse.total) * 100, 2);
         finalResponse.productionLossPercent = Math.Round((finalResponse.productionLoss / finalResponse.total) * 100, 2);
     }
+
     return finalResponse;
 }
+
+#endregion
