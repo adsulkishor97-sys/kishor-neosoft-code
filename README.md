@@ -1,34 +1,41 @@
- [Fact]
-    public async Task GetAssetPerformanceCriteria_ReturnsOk_WhenDataExists()
-    {
-        // Arrange
-        var request = _fixture.Create<GetAssetPerformanceRequest>();
-        var expectedResponse = _fixture.CreateMany<AssetPerformanceCriteriaResponse>(3).ToList();
+public async Task<IActionResult> GetAsseList(GetAssetListRequest getAssetListRequest)
+{
+    var result = await _benchMarkServices.GetAssetList(getAssetListRequest);
+    if (result == null) return NoContent();
+    else return Ok(result);
+}
+public class GetAssetListRequest
+{
 
-        _mockBenchmarkServices
-            .Setup(s => s.GetAssetPerformanceCriteria(It.IsAny<GetAssetPerformanceRequest>()))
-            .ReturnsAsync(expectedResponse);
+    public string? affiliateId { get; set; } 
+    public string? productId { get; set; } 
+    public string? plantId { get; set; } 
+    public string? processServiceName { get; set; } 
+    public string? assetClassId { get; set; } 
+    public string? designClassificationName { get; set; } 
+    public string? modelNumber { get; set; } 
+    public string? companyName { get; set; } 
 
-        // Act
-        var result = await _controller.GetAssetPerformanceCriteria(request);
 
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var actual = Assert.IsType<List<AssetPerformanceCriteriaResponse>>(okResult.Value);
-        Assert.Equal(expectedResponse.Count, actual.Count);
-    }
+}
+public class GetAssetListResponse
+{
+    public string? assetId { get; set; }
+    public string? sapId { get; set; }
+    public string? assetName { get; set; }
+    public int affiliateId { get; set; }
+    public string? affiliateName { get; set; }
+    public int productId { get; set; }
+    public int plantId { get; set; }
+    public string? plantName { get; set; }
 
-    [Fact]
-    public async Task GetAssetPerformanceCriteria_ThrowsException_ShouldPropagate()
-    {
-        // Arrange
-        var request = _fixture.Create<GetAssetPerformanceRequest>();
-        var exceptionMessage = _fixture.Create<string>();
+    public string? processServiceName { get; set; }
+    public string? modelNumber { get; set; }
+    public int assetClassId { get; set; }
+    public string? assetClassName { get; set; }
 
-        _mockBenchmarkServices
-            .Setup(s => s.GetAssetPerformanceCriteria(It.IsAny<GetAssetPerformanceRequest>()))
-            .ThrowsAsync(new System.Exception(exceptionMessage));
+    public string? designClassificationName { get; set; }
+    public string? companyName { get; set; }
 
-        // Act & Assert
-        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetAssetPerformanceCriteria(request));
-    }
+}
+Task<List<GetAssetListResponse>> GetAssetList(GetAssetListRequest getAssetListRequest);
