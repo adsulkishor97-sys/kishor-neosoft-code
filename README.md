@@ -1,137 +1,141 @@
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Threading.Tasks;
-
-public class TotalCostOfOwnershipService
-{
-    private readonly ICurrentRepository _currentRepository;
-
-    public TotalCostOfOwnershipService(ICurrentRepository currentRepository)
+    public async Task<List<AssetBenchmarkGroupedData>> GetAssetBenchmark(GetAssetBenchmarkRequest request)
     {
-        _currentRepository = currentRepository ?? throw new ArgumentNullException(nameof(currentRepository));
+        var (formatedStartdate, formatedEnddate, formatedStartdateyymmdd, formatedEnddateyymmdd) =
+            FormatDatesAsset(request.startDate!, request.endDate!);
+
+        var formatSapIds = FormatSapIds(request.sapId);
+
+        var sqlKpiDataList = await _benchMarkRepository.GetBusinessKPIDetails();
+        var kpiinfo = sqlKpiDataList.Find(x => x.kpiCode == request.kpiCode);
+
+        string quatedpmcode = "";
+
+        var groupresultdata = await GetAssetBenchmarkDataAsync(
+            request,
+            formatedStartdate,
+            formatedEnddate,
+            formatedStartdateyymmdd,
+            formatedEnddateyymmdd,
+            formatSapIds,
+            quatedpmcode);
+
+        if (groupresultdata == null || groupresultdata.Count == 0)
+            return new List<AssetBenchmarkGroupedData>();
+
+        if (!string.IsNullOrEmpty(request.kpiCode))
+        {
+            AddAssetComputedFields(groupresultdata, sqlKpiDataList, request.kpiCode, kpiinfo);
+        }
+
+        return groupresultdata;
     }
 
-    public async Task<GetTotalCostOfOwnershipResponse> GetTotalCostOfOwnershipByPlantIdAsync(GetTotalCostOfOwnershipRequestByplantId request)
+    private static (string, string, string, string) FormatDatesAsset(string startDate, string endDate)
     {
-        if (request == null)
-            throw new ArgumentNullException(nameof(request), "Request cannot be null");
-
-        var (formattedStartDate, formattedEndDate, startMonth, endMonth) = FormatTcoDates(request.startDate, request.endDate);
-        string plantId = request.plantId.ToString();
-
-        var rawResponses = await GetRawTcoDataAsync(plantId, formattedStartDate, formattedEndDate, startMonth, endMonth);
-        return ComputeTcoTotals(rawResponses);
-    }
-
-    // ✅ Keep date formatting isolated and simple
-    private static (string formattedStartDate, string formattedEndDate, string startMonth, string endMonth)
-        FormatTcoDates(string? startDate, string? endDate)
-    {
-        var startDateTime = ParseDateOrDefault(startDate);
-        var endDateTime = ParseDateOrDefault(endDate);
+        var startDateTime = DateTime.Parse(startDate, CultureInfo.InvariantCulture);
+        var endDateTime = DateTime.Parse(endDate, CultureInfo.InvariantCulture);
 
         return (
-            startDateTime.ToString("yyyy-MM-dd"),
-            endDateTime.ToString("yyyy-MM-dd"),
             startDateTime.ToString("yyyyMM"),
-            endDateTime.ToString("yyyyMM")
+            endDateTime.ToString("yyyyMM"),
+            startDateTime.ToString("yyyy-MM-dd"),
+            endDateTime.ToString("yyyy-MM-dd")
         );
     }
 
-    private static DateTime ParseDateOrDefault(string? date)
+    private static string FormatSapIds(string? sapIds)
     {
-        return !string.IsNullOrEmpty(date)
-            ? DateTime.Parse(date, CultureInfo.InvariantCulture)
-            : DateTime.Now;
+        var sapList = sapIds?.Split(',').Select(int.Parse).ToList() ?? new List<int>();
+        return string.Join(",", sapList.Select(x => x.ToString().Length < 18 ? $"'000000000{x}'" : $"'{x}'"));
     }
 
-    // ✅ Async method kept simple and parallel-safe
-    private async Task<List<GetTotalCostOfOwnershipResponse>> GetRawTcoDataAsync(
-        string plantId, string formattedStartDate, string formattedEndDate, string startMonth, string endMonth)
+    private async Task<List<AssetBenchmarkGroupedData>> GetAssetBenchmarkDataAsync(
+        GetAssetBenchmarkRequest request,
+        string formatedStartdate,
+        string formatedEnddate,
+        string formatedStartdateyymmdd,
+        string formatedEnddateyymmdd,
+        string formatSapIds,
+        string quatedpmcode)
     {
-        var affiliateTco = new AffiliateTcoByPlantId();
-        var responseList = new List<GetTotalCostOfOwnershipResponse>();
+        var assetBenchmarkQuery = new AssetBenchmarkQuery();
+        var plantDataList = assetBenchmarkQuery.plantDataList
+            .Where(a => a.kpiCode == request.kpiCode)
+            .ToList();
 
-        foreach (var item in affiliateTco.totalCostOfOwnerships)
+        var tasks = plantDataList
+            .Select(item => GetAssetBenchmarkForItemAsync(item, request, formatedStartdate, formatedEnddate,
+                formatedStartdateyymmdd, formatedEnddateyymmdd, formatSapIds, quatedpmcode));
+
+        var results = await Task.WhenAll(tasks);
+        return results.SelectMany(x => x).ToList();
+    }
+
+    private async Task<List<AssetBenchmarkGroupedData>> GetAssetBenchmarkForItemAsync(
+        AffiliateBenchmark item,
+        GetAssetBenchmarkRequest request,
+        string formatedStartdate,
+        string formatedEnddate,
+        string formatedStartdateyymmdd,
+        string formatedEnddateyymmdd,
+        string formatSapIds,
+        string quatedpmcode)
+    {
+        var parameters = new AssetQueryParameters
         {
-            var query = BuildTcoQuery(item.query, plantId, formattedStartDate, formattedEndDate, startMonth, endMonth);
-            var results = await ExecuteTcoQueryAsync(query);
-            responseList.AddRange(results);
-        }
-
-        return responseList;
-    }
-
-    private static string BuildTcoQuery(
-        string query, string plantId, string formattedStartDate, string formattedEndDate, string startMonth, string endMonth)
-    {
-        return query
-            .Replace("plantId", plantId)
-            .Replace("startDate", formattedStartDate)
-            .Replace("endDate", formattedEndDate)
-            .Replace("formatedStartdate", startMonth)
-            .Replace("formatedEnddate", endMonth);
-    }
-
-    // ✅ Executes query with minimal inline logic
-    private async Task<List<GetTotalCostOfOwnershipResponse>> ExecuteTcoQueryAsync(string query)
-    {
-        return await _currentRepository.ExecuteBigDataQuery_New<GetTotalCostOfOwnershipResponse>(
-            query,
-            reader => new GetTotalCostOfOwnershipResponse
-            {
-                maintenance = GetDecimalValue(reader, "maintenance"),
-                disposal = GetDecimalValue(reader, "disposal"),
-                acquisition = GetDecimalValue(reader, "acquisition"),
-                operation = GetDecimalValue(reader, "operation"),
-                productionLoss = GetDecimalValue(reader, "production_loss")
-            }) ?? new List<GetTotalCostOfOwnershipResponse>();
-    }
-
-    private static decimal GetDecimalValue(dynamic reader, string column)
-    {
-        return reader[column] != DBNull.Value ? Convert.ToDecimal(reader[column]) : 0;
-    }
-
-    // ✅ Core computation method — clean, pure, and minimal
-    private static GetTotalCostOfOwnershipResponse ComputeTcoTotals(List<GetTotalCostOfOwnershipResponse> responses)
-    {
-        var first = responses.FirstOrDefault() ?? new GetTotalCostOfOwnershipResponse();
-
-        var finalResponse = new GetTotalCostOfOwnershipResponse
-        {
-            maintenance = Math.Round(first.maintenance, 0),
-            disposal = Math.Round(first.disposal, 0),
-            acquisition = Math.Round(first.acquisition, 0),
-            operation = Math.Round(first.operation, 0),
-            productionLoss = Math.Round(first.productionLoss, 0)
+            overalN = item.bestAchievedEver ?? string.Empty,
+            formattedStartDate = formatedStartdate,
+            formattedEndDate = formatedEnddate,
+            formattedStartDateYyyyMmDd = formatedStartdateyymmdd,
+            formattedEndDateYyyyMmDd = formatedEnddateyymmdd,
+            affiliateRequest = string.Empty,
+            request = request,
+            quotedPmCode = quatedpmcode,
+            sapIds = formatSapIds
         };
 
-        finalResponse.total = finalResponse.maintenance + finalResponse.disposal +
-                              finalResponse.acquisition + finalResponse.operation +
-                              finalResponse.productionLoss;
+        var query = ReplaceAssetQuery(parameters);
 
-        finalResponse.totalAssetOperation = finalResponse.productionLoss + finalResponse.operation + finalResponse.maintenance;
-
-        if (finalResponse.total > 0)
-            ComputeTcoPercentages(finalResponse);
-
-        return finalResponse;
+        return await _benchMarkRepository.ExecuteBigDataQuery<AssetBenchmarkGroupedData>(query, MapAssetBenchmarkGroupedData)
+               ?? new List<AssetBenchmarkGroupedData>();
     }
 
-    private static void ComputeTcoPercentages(GetTotalCostOfOwnershipResponse response)
+    private static AssetBenchmarkGroupedData MapAssetBenchmarkGroupedData(IDataRecord reader)
     {
-        response.maintenancePercent = CalculatePercentage(response.maintenance, response.total);
-        response.disposalPercent = CalculatePercentage(response.disposal, response.total);
-        response.acquisitionPercent = CalculatePercentage(response.acquisition, response.total);
-        response.operationPercent = CalculatePercentage(response.operation, response.total);
-        response.productionLossPercent = CalculatePercentage(response.productionLoss, response.total);
+        return new AssetBenchmarkGroupedData
+        {
+            manufacturer = reader["manufacturer"] != DBNull.Value ? Convert.ToString(reader["manufacturer"]) : "",
+            modelNumber = reader["model_number"] != DBNull.Value ? Convert.ToString(reader["model_number"]) : "",
+            bestAchievedEver = reader["best_achieved_ever"] != DBNull.Value ? Convert.ToDecimal(reader["best_achieved_ever"]) : 0,
+            absolute = reader["absolute"] != DBNull.Value ? Convert.ToDecimal(reader["absolute"]) : 0,
+            actual = reader["actual"] != DBNull.Value ? Convert.ToInt32(reader["actual"]) : 0,
+            sapId = reader["sap_id"] != DBNull.Value ? Convert.ToString(reader["sap_id"])!.TrimStart('0') : "",
+        };
     }
 
-    private static decimal CalculatePercentage(decimal value, decimal total)
+    private static void AddAssetComputedFields(
+        List<AssetBenchmarkGroupedData> groupData,
+        List<KpiDataJsonResponse> sqlKpiDataList,
+        string kpiCode,
+        KpiDataJsonResponse? kpiinfo)
     {
-        return total == 0 ? 0 : Math.Round((value / total) * 100, 2);
+        decimal bestAchivedEverMin = kpiinfo?.direction == 1
+            ? groupData.Min(x => x.bestAchievedEver)
+            : groupData.Max(x => x.bestAchievedEver);
+
+        decimal bestAchivedForSinglePeriod = kpiinfo?.direction == 1
+            ? groupData.Min(x => x.actual)
+            : groupData.Max(x => x.actual);
+
+        int? sqldirection = sqlKpiDataList.Where(x => x.kpiCode == kpiCode).Select(x => x.direction).FirstOrDefault();
+        long? targetMax = sqlKpiDataList.Where(x => x.kpiCode == kpiCode).Select(x => x.overallTargetMax).FirstOrDefault();
+
+        foreach (var itemData in groupData)
+        {
+            itemData.direction = sqldirection ?? 0;
+            itemData.target = (int)(targetMax ?? 0);
+            itemData.bestAchievedEverMin = bestAchivedEverMin;
+            itemData.bestAchievedForSinglePeriod = bestAchivedForSinglePeriod;
+        }
     }
 }
