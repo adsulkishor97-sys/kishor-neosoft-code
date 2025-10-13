@@ -1,54 +1,36 @@
-// ✅ Test 1: Returns Ok when data exists
-    [Fact]
-    public async Task GetAssetBenchmarkComparision_ReturnsOk_WhenDataExists()
-    {
-        // Arrange
-        var request = _fixture.Create<AssetBenchmarkComparisionRequest>();
-        var expectedResponse = _fixture.CreateMany<AssetBenchmarkComparisionResponse>(3).ToList();
+ public async Task<IActionResult> GetAffiliateBenchmark(GetAffiliateBenchmarkRequest request)
+ {
 
-        _mockBenchMarkServices
-            .Setup(s => s.GetAssetBenchmarkComparisionAsync(It.IsAny<AssetBenchmarkComparisionRequest>()))
-            .ReturnsAsync(expectedResponse);
+     var caseHierarchyResult = await _benchMarkServices.GetAffiliateBenchmark(request);
+     if (caseHierarchyResult == null) return NoContent();
+     else return Ok(caseHierarchyResult);
+ }
+ public class GetAffiliateBenchmarkRequest
+{
+    public string? affiliateId { get; set; }
+    public string? kpiCode { get; set; }
+    public string? startDate { get; set; }
+    public string? endDate { get; set; }
+}
+ public class GetAffiliateBenchmarkResponse
+ {
+     public List<BenchmarkGroupedData> groupedBenchmarkData { get; set; } = new List<BenchmarkGroupedData>();
 
-        // Act
-        var result = await _controller.GetAssetBenchmarkComparision(request);
+ }
+ [ExcludeFromCodeCoverage]
+ public class BenchmarkGroupedData
+ {
+     public string? affiliateName { get; set; }
+     public long? target { get; set; } = 0;
+     public int state { get; set; } = 0;
+     public int? direction { get; set; } = 0;
+     public decimal actual { get; set; } = 0;
+     public decimal absolute { get; set; } = 0;
+     public decimal bestAchievedEver { get; set; } = 0;
+     public decimal bestAchievedEverMin { get; set; } = 0;
+     public decimal bestAchievedForSinglePeriod { get; set; } = 0;
 
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var actual = Assert.IsType<List<AssetBenchmarkComparisionResponse>>(okResult.Value);
-        Assert.Equal(expectedResponse.Count, actual.Count);
-    }
 
-    // ✅ Test 2: Returns NoContent when service returns null
-    [Fact]
-    public async Task GetAssetBenchmarkComparision_ReturnsNoContent_WhenServiceReturnsNull()
-    {
-        // Arrange
-        var request = _fixture.Create<AssetBenchmarkComparisionRequest>();
 
-        _mockBenchMarkServices
-            .Setup(s => s.GetAssetBenchmarkComparisionAsync(It.IsAny<AssetBenchmarkComparisionRequest>()))
-            .ReturnsAsync((List<AssetBenchmarkComparisionResponse>?)null);
-
-        // Act
-        var result = await _controller.GetAssetBenchmarkComparision(request);
-
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-    }
-
-    // ✅ Test 3: Propagates exception
-    [Fact]
-    public async Task GetAssetBenchmarkComparision_ThrowsException_ShouldPropagate()
-    {
-        // Arrange
-        var request = _fixture.Create<AssetBenchmarkComparisionRequest>();
-        var exceptionMessage = _fixture.Create<string>();
-
-        _mockBenchMarkServices
-            .Setup(s => s.GetAssetBenchmarkComparisionAsync(It.IsAny<AssetBenchmarkComparisionRequest>()))
-            .ThrowsAsync(new System.Exception(exceptionMessage));
-
-        // Act & Assert
-        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetAssetBenchmarkComparision(request));
-    }
+ }
+ Task<List<BenchmarkGroupedData>> GetAffiliateBenchmark(GetAffiliateBenchmarkRequest request);
