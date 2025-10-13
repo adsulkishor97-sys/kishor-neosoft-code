@@ -1,27 +1,51 @@
-public async Task<IActionResult> GetBenchmarkDesignBySapId(GetBenchmarkDesignBySapIdRequest request)
-{
-    var PlantListResult = await _benchMarkServices.GetBenchmarkDesignBySapId(request);
-    if (PlantListResult == null) return NoContent();
-    else return Ok(PlantListResult);
-}
-public class GetBenchmarkDesignBySapIdRequest
-{
-    public string? sapId {  get; set; }
-    public string? kpiCode {  get; set; }
+[Fact]
+    public async Task GetBenchmarkDesignBySapId_ReturnsOk_WhenDataExists()
+    {
+        // Arrange
+        var request = _fixture.Create<GetBenchmarkDesignBySapIdRequest>();
+        var expectedResponse = _fixture.CreateMany<GetBenchmarkDesignBySapIdResponse>(3).ToList();
 
-}
-public class GetBenchmarkDesignBySapIdResponse
-{
-    public string? sapId {  get; set; }
-    public string? target {  get; set; }
-    public int direction {  get; set; }
-    public string? actualValue { get; set; }
-    public string? absolute {  get; set; }
-    public string? bestAchievedEver {  get; set; }
-    public string? bestAchievedEverMin {  get; set; }
-    public string? bestAchievedForSinglePeriod {  get; set; }
-    public string? modelNo {  get; set; }
-    public string? manufacturer {  get; set; }
-    public string? designValue {  get; set; }
-}
- Task<List<GetBenchmarkDesignBySapIdResponse>> GetBenchmarkDesignBySapId(GetBenchmarkDesignBySapIdRequest request);
+        _mockBenchmarkServices
+            .Setup(s => s.GetBenchmarkDesignBySapId(It.IsAny<GetBenchmarkDesignBySapIdRequest>()))
+            .ReturnsAsync(expectedResponse);
+
+        // Act
+        var result = await _controller.GetBenchmarkDesignBySapId(request);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var actual = Assert.IsType<List<GetBenchmarkDesignBySapIdResponse>>(okResult.Value);
+        Assert.Equal(expectedResponse.Count, actual.Count);
+    }
+
+    [Fact]
+    public async Task GetBenchmarkDesignBySapId_ReturnsNoContent_WhenServiceReturnsNull()
+    {
+        // Arrange
+        var request = _fixture.Create<GetBenchmarkDesignBySapIdRequest>();
+
+        _mockBenchmarkServices
+            .Setup(s => s.GetBenchmarkDesignBySapId(It.IsAny<GetBenchmarkDesignBySapIdRequest>()))
+            .ReturnsAsync((List<GetBenchmarkDesignBySapIdResponse>?)null);
+
+        // Act
+        var result = await _controller.GetBenchmarkDesignBySapId(request);
+
+        // Assert
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task GetBenchmarkDesignBySapId_ThrowsException_ShouldPropagate()
+    {
+        // Arrange
+        var request = _fixture.Create<GetBenchmarkDesignBySapIdRequest>();
+        var exceptionMessage = _fixture.Create<string>();
+
+        _mockBenchmarkServices
+            .Setup(s => s.GetBenchmarkDesignBySapId(It.IsAny<GetBenchmarkDesignBySapIdRequest>()))
+            .ThrowsAsync(new System.Exception(exceptionMessage));
+
+        // Act & Assert
+        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetBenchmarkDesignBySapId(request));
+    }
