@@ -1,22 +1,54 @@
-public async Task<IActionResult> GetAssetBenchmarkComparision(AssetBenchmarkComparisionRequest assetBenchmarkComparisionRequest)
-{
-    var assetComparisionListResult = await _benchMarkServices.GetAssetBenchmarkComparisionAsync(assetBenchmarkComparisionRequest);
-    if (assetComparisionListResult == null) return NoContent();
-    else return Ok(assetComparisionListResult);
-}
-public class AssetBenchmarkComparisionRequest
-{
-    public string? sapId { get; set; }
-    public string? kpiCode { get; set; }
-    public string? startDate { get; set; }
-    public string? endDate { get; set; }
-}
- public class AssetBenchmarkComparisionResponse
- {
-     public string? sapId { get; set; }
-     public decimal? actual { get; set; }
-     public decimal? absolute { get; set; }
-     public string? modelNumber { get; set; }
-     public string? companyName { get; set; }
- }
- Task<List<AssetBenchmarkComparisionResponse>> GetAssetBenchmarkComparisionAsync(AssetBenchmarkComparisionRequest assetBenchmarkComparisionRequest);
+// ✅ Test 1: Returns Ok when data exists
+    [Fact]
+    public async Task GetAssetBenchmarkComparision_ReturnsOk_WhenDataExists()
+    {
+        // Arrange
+        var request = _fixture.Create<AssetBenchmarkComparisionRequest>();
+        var expectedResponse = _fixture.CreateMany<AssetBenchmarkComparisionResponse>(3).ToList();
+
+        _mockBenchMarkServices
+            .Setup(s => s.GetAssetBenchmarkComparisionAsync(It.IsAny<AssetBenchmarkComparisionRequest>()))
+            .ReturnsAsync(expectedResponse);
+
+        // Act
+        var result = await _controller.GetAssetBenchmarkComparision(request);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var actual = Assert.IsType<List<AssetBenchmarkComparisionResponse>>(okResult.Value);
+        Assert.Equal(expectedResponse.Count, actual.Count);
+    }
+
+    // ✅ Test 2: Returns NoContent when service returns null
+    [Fact]
+    public async Task GetAssetBenchmarkComparision_ReturnsNoContent_WhenServiceReturnsNull()
+    {
+        // Arrange
+        var request = _fixture.Create<AssetBenchmarkComparisionRequest>();
+
+        _mockBenchMarkServices
+            .Setup(s => s.GetAssetBenchmarkComparisionAsync(It.IsAny<AssetBenchmarkComparisionRequest>()))
+            .ReturnsAsync((List<AssetBenchmarkComparisionResponse>?)null);
+
+        // Act
+        var result = await _controller.GetAssetBenchmarkComparision(request);
+
+        // Assert
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    // ✅ Test 3: Propagates exception
+    [Fact]
+    public async Task GetAssetBenchmarkComparision_ThrowsException_ShouldPropagate()
+    {
+        // Arrange
+        var request = _fixture.Create<AssetBenchmarkComparisionRequest>();
+        var exceptionMessage = _fixture.Create<string>();
+
+        _mockBenchMarkServices
+            .Setup(s => s.GetAssetBenchmarkComparisionAsync(It.IsAny<AssetBenchmarkComparisionRequest>()))
+            .ThrowsAsync(new System.Exception(exceptionMessage));
+
+        // Act & Assert
+        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetAssetBenchmarkComparision(request));
+    }
