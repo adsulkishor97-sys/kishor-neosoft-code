@@ -1,36 +1,54 @@
-public async Task<IActionResult> GetPlantBenchmark(GetPlantBenchmarkRequest request)
-{
+// ✅ Test 1: Should return OK when data exists
+    [Fact]
+    public async Task GetPlantBenchmark_ReturnsOk_WhenDataExists()
+    {
+        // Arrange
+        var request = _fixture.Create<GetPlantBenchmarkRequest>();
+        var expectedResponse = _fixture.CreateMany<PlantBenchmarkGroupedData>(3).ToList();
 
-    var caseHierarchyResult = await _benchMarkServices.GetPlantBenchmark(request);
-    if (caseHierarchyResult == null) return NoContent();
-    else return Ok(caseHierarchyResult);
-}
-public class GetPlantBenchmarkRequest
-{
-    public string? plantId { get; set; }
-    public string? kpiCode { get; set; }
-    public string? startDate { get; set; }
-    public string? endDate { get; set; }
-    public int assetClassId { get; set; }
-}
-public class GetPlantBenchmarkResponse
-{
-    public List<PlantBenchmarkGroupedData> plantgroupedBenchmarkData { get; set; } = new List<PlantBenchmarkGroupedData>();
+        _mockBenchMarkServices
+            .Setup(s => s.GetPlantBenchmark(It.IsAny<GetPlantBenchmarkRequest>()))
+            .ReturnsAsync(expectedResponse);
 
-}
+        // Act
+        var result = await _controller.GetPlantBenchmark(request);
 
-public class PlantBenchmarkGroupedData
-{
-  
-    public int plantId { get; set; }
-    public long? target { get; set; }
-  
-    public int? direction { get; set; }
-    public decimal actual { get; set; }
-    public decimal absolute { get; set; }
-    public decimal bestAchievedEver { get; set; } = 0;
-    public decimal bestAchievedEverMin { get; set; } = 0;
-    public decimal bestAchievedForSinglePeriod { get; set; } = 0;
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var actual = Assert.IsType<List<PlantBenchmarkGroupedData>>(okResult.Value);
+        Assert.Equal(expectedResponse.Count, actual.Count);
+    }
 
-}
-Task<List<PlantBenchmarkGroupedData>> GetPlantBenchmark(GetPlantBenchmarkRequest request);
+    // ✅ Test 2: Should return NoContent when service returns null
+    [Fact]
+    public async Task GetPlantBenchmark_ReturnsNoContent_WhenServiceReturnsNull()
+    {
+        // Arrange
+        var request = _fixture.Create<GetPlantBenchmarkRequest>();
+
+        _mockBenchMarkServices
+            .Setup(s => s.GetPlantBenchmark(It.IsAny<GetPlantBenchmarkRequest>()))
+            .ReturnsAsync((List<PlantBenchmarkGroupedData>?)null);
+
+        // Act
+        var result = await _controller.GetPlantBenchmark(request);
+
+        // Assert
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    // ✅ Test 3: Should propagate exception from service
+    [Fact]
+    public async Task GetPlantBenchmark_ThrowsException_ShouldPropagate()
+    {
+        // Arrange
+        var request = _fixture.Create<GetPlantBenchmarkRequest>();
+        var exceptionMessage = _fixture.Create<string>();
+
+        _mockBenchMarkServices
+            .Setup(s => s.GetPlantBenchmark(It.IsAny<GetPlantBenchmarkRequest>()))
+            .ThrowsAsync(new System.Exception(exceptionMessage));
+
+        // Act & Assert
+        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetPlantBenchmark(request));
+    }
