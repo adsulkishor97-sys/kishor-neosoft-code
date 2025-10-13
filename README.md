@@ -77,3 +77,6 @@ public class BenchmarkControllerTests
         // Assert
         Assert.IsType<NoContentResult>(result);
     }
+Assert.IsType() Failure: Value is not the exact type
+Expected: typeof(Microsoft.AspNetCore.Mvc.NoContentResult)
+Actual:   typeof(Microsoft.AspNetCore.Mvc.OkObjectResult)
