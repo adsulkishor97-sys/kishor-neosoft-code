@@ -1,51 +1,35 @@
-[Fact]
-    public async Task GetBenchmarkDesignBySapId_ReturnsOk_WhenDataExists()
+public async Task<IActionResult> PerformanceSummary(GetKpiPerformanceRequest reportRequest)
+{
+    var getAffiliateCodeList = _configServices.GetAffiliateCodeList(reportRequest.affiliateId);
+    GetCaseHierarchyRequest affiliateIdrequest = new()
     {
-        // Arrange
-        var request = _fixture.Create<GetBenchmarkDesignBySapIdRequest>();
-        var expectedResponse = _fixture.CreateMany<GetBenchmarkDesignBySapIdResponse>(3).ToList();
-
-        _mockBenchmarkServices
-            .Setup(s => s.GetBenchmarkDesignBySapId(It.IsAny<GetBenchmarkDesignBySapIdRequest>()))
-            .ReturnsAsync(expectedResponse);
-
-        // Act
-        var result = await _controller.GetBenchmarkDesignBySapId(request);
-
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var actual = Assert.IsType<List<GetBenchmarkDesignBySapIdResponse>>(okResult.Value);
-        Assert.Equal(expectedResponse.Count, actual.Count);
-    }
-
-    [Fact]
-    public async Task GetBenchmarkDesignBySapId_ReturnsNoContent_WhenServiceReturnsNull()
-    {
-        // Arrange
-        var request = _fixture.Create<GetBenchmarkDesignBySapIdRequest>();
-
-        _mockBenchmarkServices
-            .Setup(s => s.GetBenchmarkDesignBySapId(It.IsAny<GetBenchmarkDesignBySapIdRequest>()))
-            .ReturnsAsync((List<GetBenchmarkDesignBySapIdResponse>?)null);
-
-        // Act
-        var result = await _controller.GetBenchmarkDesignBySapId(request);
-
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-    }
-
-    [Fact]
-    public async Task GetBenchmarkDesignBySapId_ThrowsException_ShouldPropagate()
-    {
-        // Arrange
-        var request = _fixture.Create<GetBenchmarkDesignBySapIdRequest>();
-        var exceptionMessage = _fixture.Create<string>();
-
-        _mockBenchmarkServices
-            .Setup(s => s.GetBenchmarkDesignBySapId(It.IsAny<GetBenchmarkDesignBySapIdRequest>()))
-            .ThrowsAsync(new System.Exception(exceptionMessage));
-
-        // Act & Assert
-        await Assert.ThrowsAsync<System.Exception>(() => _controller.GetBenchmarkDesignBySapId(request));
-    }
+        bigDataAffiliateIdList = $"{string.Join(",", getAffiliateCodeList.Select(n => $"'{n}'"))}"
+    };
+    if (affiliateIdrequest.bigDataAffiliateIdList == null) return Unauthorized();
+    var caseHierarchyResult = await _performanceSummServices.PerformanceSummaryAsync(reportRequest, affiliateIdrequest.bigDataAffiliateIdList);
+    if (caseHierarchyResult! == null) return NoContent();
+    else return Ok(caseHierarchyResult);
+}
+ public class GetKpiPerformanceRequest
+ {
+     public string? startDate { get; set; }
+     public string? endDate { get; set; }
+     public string? performanceSummary { get; set; }
+     public int? affiliateId { get; set; }
+     public int? plantId { get; set; }
+ }
+  public class KpiPerformanceResponse
+ {
+     public string? performanceSummary { get; set; } 
+     public decimal average { get; set; }
+     public decimal target { get; set; }
+     public string? bestAffiliateName { get; set; }
+     public decimal bestAffiliate { get; set; }
+     public string? bestPlantName { get; set; }
+     public decimal bestPlant { get; set; }
+     public List<Affiliate>? affiliates { get; set; }
+     public List<Plant>? plants { get; set; }
+     public List<KpiDetail>? kpis { get; set; }
+ }
+ List<int> GetAffiliateCodeList(int? affiliateId);
+ Task<KpiPerformanceResponse> PerformanceSummaryAsync(GetKpiPerformanceRequest request, string affiliateRequest);
