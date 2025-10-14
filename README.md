@@ -1,96 +1,135 @@
-using Xunit;
-using Moq;
-using AutoFixture;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using YourNamespace.Controllers;
-using YourNamespace.Models;
-using YourNamespace.Services;
-
-public class SearchHistoryControllerTests
+public async Task<KpiPerformanceResponse> PerformanceSummaryPlantAsync(GetKpiPerformanceRequest request, string affiliateRequest)
 {
-    private readonly IFixture _fixture;
-    private readonly Mock<ISearchHistoryServices> _mockSearchHistoryServices;
-    private readonly SearchHistoryController _controller;
-    private readonly Mock<HttpContext> _mockHttpContext;
+    KpiPerformanceResponse kpiPerformanceResponse = new KpiPerformanceResponse();
 
-    public SearchHistoryControllerTests()
+    try
     {
-        _fixture = new Fixture();
-        _mockSearchHistoryServices = new Mock<ISearchHistoryServices>();
-        _mockHttpContext = new Mock<HttpContext>();
+        var result = new KpiPerformanceResponse();
+        result.kpis = new List<KpiDetail>();
+        var allConvertedReport = new List<ConvertedKpiItemDetails>();
+        var allConvertedplantReports = new List<ConvertedKpiItemPlantDetails>();
 
-        _controller = new SearchHistoryController(_mockSearchHistoryServices.Object);
+        KpiFormulaTargetRequest kpiFormulaTargetRequest = new KpiFormulaTargetRequest();
+        GetCaseHierarchyRequest getCaseHierarchy = new GetCaseHierarchyRequest();
+        getCaseHierarchy.affiliateIdList = request.affiliateId.ToString();
 
-        // ✅ Setup mock HttpContext with a fake user claim
-        var claims = new List<Claim> { new Claim("uid", "101") };
-        var identity = new ClaimsIdentity(claims, "mock");
-        var user = new ClaimsPrincipal(identity);
-        _mockHttpContext.Setup(c => c.User).Returns(user);
+        List<GetCaseHierarchyResponse> plantDetails = await _configRepository.GetCaseHierarchyAsync(getCaseHierarchy);
 
-        _controller.ControllerContext = new ControllerContext
+        // get affiliate lists
+        var affiliatesRes = _currentRepository.GetAffiliateLists().Result.ToList();
+        var affiliateDataResult = _currentRepository.GetAffiliateLists().Result.Where(x => x.affiliateId == request.affiliateId).ToList();
+        string formatedAffiliateData = string.Join(",", affiliateDataResult.Select(x => $"'{x.affiliateCode}'").ToList());
+        kpiFormulaTargetRequest.performanceSummary = request.performanceSummary;
+
+        // get KPIs details like formula based on performanceSummary 
+        var kpisFormula = GetKpiFormulas(kpiFormulaTargetRequest);
+        // get actual values from BigData Queries based on startDate,endDate and affiliate
+        var actualData = GetPerformanceSummaryActualDataNew(request, affiliateRequest);
+        var actualPlantsData = GetPerformanceSummaryAffiliateActualData(request, formatedAffiliateData, plantDetails);
+
+        // iterate loop to get affiliate list with actual and target values
+        foreach (var kpi in kpisFormula)
         {
-            HttpContext = _mockHttpContext.Object
-        };
+
+            var actualKpiname = kpi.name!.Replace(" ", "_");
+            var report = await GenerateMaintenanceKpiReport(kpi.name!, affiliatesRes, actualData[actualKpiname!], kpi.target);
+            var plantreport = await GenerateMaintenancePlantKpiReport(kpi.name!, plantDetails, actualPlantsData[actualKpiname!], kpi.target);
+            var convertedReport = await GenerateConvertedMaintenanceReport(kpi!, report);
+            var convertedPlantReport = await GenerateConvertedMaintenancePlantReport(kpi!, plantreport);
+
+
+            result.kpis!.Add(report);
+            result.kpis.ForEach(x =>
+            {
+                x.plants ??= new List<Plant>();
+                if (plantreport?.plants != null)
+                    x.plants.AddRange(plantreport.plants);
+            }
+            );
+
+            allConvertedReport.AddRange(convertedReport);
+            allConvertedplantReports.AddRange(convertedPlantReport);
+
+        }
+
+        // Calculate cost effectiveness
+        decimal min = 0m;
+        decimal max = 2m;
+        var avgActualYs = allConvertedReport
+            .GroupBy(c => c.affiliate!)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.actualY));
+        var avgPlantActualYs = allConvertedplantReports
+           .GroupBy(c => c.plant!)
+           .ToDictionary(g => g.Key, g => g.Sum(x => x.actualY));
+
+        var sumOfMaxAllAffiliates = allConvertedReport
+            .GroupBy(c => c.affiliate!)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.max));
+
+        max = sumOfMaxAllAffiliates.Select(a => a.Value).FirstOrDefault();
+
+
+
+        var costEffectivenessList = avgActualYs
+            .Select(kvp => new PerformanceSummaryGroupItem(
+                kvp.Key,
+                kvp.Value,
+                min,
+                max,
+                (kvp.Value / max) * 100m,
+                100m))
+            .ToList();
+        Console.WriteLine(costEffectivenessList);
+
+        var costEffectivenessPlantList = avgPlantActualYs
+            .Select(kvp => new PerformanceSummaryPlantGroupItem(
+                kvp.Key,
+                kvp.Value,
+                min,
+                max,
+                (kvp.Value / max) * 100m,
+                100m))
+            .ToList();
+        string? PlantName = plantDetails!.Where(x => x.plantId == request.plantId).Select(x => x.plantName).FirstOrDefault();
+        result.performanceSummary = kpiFormulaTargetRequest.performanceSummary;
+        if (costEffectivenessPlantList.Count > 0)
+        {
+            result.average = Math.Round(costEffectivenessPlantList.Where(x => x.Plant == PlantName).Average(x => x.Percentage), 2);
+            result.bestPlant = Math.Round(costEffectivenessPlantList.OrderByDescending(c => c.Actual).FirstOrDefault()!.Percentage, 2);
+            result.bestPlantName = costEffectivenessPlantList.OrderByDescending(c => c.Actual).FirstOrDefault()!.Plant;
+            result.target = costEffectivenessPlantList.OrderByDescending(c => c.Target).FirstOrDefault()!.Target;
+        }
+        result.plants = null;
+        result.kpis.ForEach(x => x.affiliates = null);
+        result.affiliates = null;
+        result.kpis = null;
+
+        return result;
     }
-
-    // ✅ TEST 1: Should return 200 OK when data exists
-    [Fact]
-    public async Task GetSearchHistoryBySearchKey_ReturnsOk_WhenDataExists()
+    catch (Exception)
     {
-        // Arrange
-        var request = _fixture.Create<GetSearchHistoryRequest>();
-        var expectedData = _fixture.Create<List<string>>();
-
-        _mockSearchHistoryServices
-            .Setup(s => s.GetSearchHistoryBySearchKeyAsync(It.IsAny<GetSearchHistoryRequest>(), It.IsAny<int>()))
-            .ReturnsAsync(expectedData);
-
-        // Act
-        var result = await _controller.GetSearchHistoryBySearchKey(request);
-
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        Assert.Equal(expectedData, okResult.Value);
-        _mockSearchHistoryServices.Verify(
-            s => s.GetSearchHistoryBySearchKeyAsync(It.IsAny<GetSearchHistoryRequest>(), It.IsAny<int>()),
-            Times.Once);
-    }
-
-    // ✅ TEST 2: Should return 204 NoContent when no data
-    [Fact]
-    public async Task GetSearchHistoryBySearchKey_ReturnsNoContent_WhenNoData()
-    {
-        // Arrange
-        var request = _fixture.Create<GetSearchHistoryRequest>();
-        List<string>? noData = null;
-
-        _mockSearchHistoryServices
-            .Setup(s => s.GetSearchHistoryBySearchKeyAsync(It.IsAny<GetSearchHistoryRequest>(), It.IsAny<int>()))
-            .ReturnsAsync(noData);
-
-        // Act
-        var result = await _controller.GetSearchHistoryBySearchKey(request);
-
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-    }
-
-    // ✅ TEST 3: Should propagate exceptions if service throws
-    [Fact]
-    public async Task GetSearchHistoryBySearchKey_ThrowsException_WhenServiceFails()
-    {
-        // Arrange
-        var request = _fixture.Create<GetSearchHistoryRequest>();
-        _mockSearchHistoryServices
-            .Setup(s => s.GetSearchHistoryBySearchKeyAsync(It.IsAny<GetSearchHistoryRequest>(), It.IsAny<int>()))
-            .ThrowsAsync(new System.Exception("Database Error"));
-
-        // Act & Assert
-        await Assert.ThrowsAsync<System.Exception>(() =>
-            _controller.GetSearchHistoryBySearchKey(request));
+        return kpiPerformanceResponse;
     }
 }
+
+
+ #region PerformanceSummaryPlantAsync
+ [Theory]
+ [ClassData(typeof(PerformanceSummaryPlantAsyncRequestGenerator))]
+ public async Task PerformanceSummaryPlantAsync_ShouldReturnData_WhenRepositoryReturnsData(GetKpiPerformanceRequest request, GetCaseHierarchyRequest affiliateIdrequest, List<AffiliateList> affiliateList
+     , List<KpiFormulaTarget> dbFormulas, List<GetCaseHierarchyResponse> getCaseHierarchyResponses)
+ {
+     // Arrange  
+
+     _currRepositoryMock.Setup(repo => repo.GetAffiliateLists()).ReturnsAsync(affiliateList);
+     _configRepositoryMock.Setup(repo => repo.GetCaseHierarchyAsync(It.IsAny<GetCaseHierarchyRequest>())).ReturnsAsync(getCaseHierarchyResponses);
+
+     _performanceSumRepositoryMock.Setup(repo => repo.GetKpiFormulaTarget(It.IsAny<KpiFormulaTargetRequest>())).Returns(Task.FromResult(dbFormulas));
+     //Act
+     var result = await _performanceSummServices.PerformanceSummaryPlantAsync(request, affiliateIdrequest.affiliateIdList!);
+     // Assert
+     Assert.NotNull(result);
+     Assert.IsType<KpiPerformanceResponse>(result);
+ }
+
+ #endregion
