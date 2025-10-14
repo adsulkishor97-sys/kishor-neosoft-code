@@ -1,109 +1,51 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using System.Threading.Tasks;
-using Xunit;
-using AutoFixture;
+ public async Task<IActionResult> GetUserActivityDataWithDynamicSearch([FromBody] GetLoggingDataWithDynamicSearchRequest request)
+ {           
+     var GetUserActivityDataWithresult = await _adminServices.GetActivityTrackerLogsAsync(request.pageNumber, request.pageSize, request.keyword!);
+     if (GetUserActivityDataWithresult == null || GetUserActivityDataWithresult.data == null || GetUserActivityDataWithresult.data.Count == 0)
+     {
+         return NoContent();
+     }
+     else
+     {
+         GetUserActivityDataWithresult.pageSize = request.pageSize;
+         GetUserActivityDataWithresult.pageNumber = request.pageNumber;
+         return Ok(GetUserActivityDataWithresult);
+     }
+ }
+  public class GetLoggingDataWithDynamicSearchRequest
+ {
+     [Range(0, 10000000)]
+     public int pageNumber { get; set; } = 1;
 
-public class GenerateConvertedMaintenancePlantReportTests
+     [Range(0, 10000)]
+     public int pageSize { get; set; } = 20;
+
+     public string? keyword { get; set; } = "";
+ }
+ public class GetActivityTrackerLogsRepositoryLayerResponse : PaginationRequest
 {
-    private readonly IFixture _fixture;
-
-    public GenerateConvertedMaintenancePlantReportTests()
-    {
-        _fixture = new Fixture();
-    }
-
-    [Fact]
-    public async Task GenerateConvertedMaintenancePlantReport_ShouldReturnConvertedList_WhenPlantsExist()
-    {
-        // Arrange
-        var plants = _fixture.Build<Plant>()
-                             .With(p => p.actual, _fixture.Create<decimal>())
-                             .With(p => p.plantName, _fixture.Create<string>())
-                             .CreateMany(3)
-                             .ToList();
-
-        var report = _fixture.Build<KpiDetail>()
-                             .With(x => x.plants, plants)
-                             .Create();
-
-        var kpiFormula = _fixture.Build<KpiFormula>()
-                                 .With(f => f.formula, new Func<decimal, decimal>(x => x + _fixture.Create<decimal>()))
-                                 .Create();
-
-        // Act
-        var result = await InvokeGenerateConvertedMaintenancePlantReport(kpiFormula, report);
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Equal(report.plants.Count, result.Count);
-        Assert.All(result, item =>
-        {
-            Assert.NotNull(item.plant);
-            Assert.True(item.actualY >= 0);
-            Assert.Equal("100%", item.target);
-            Assert.Equal(0, item.min);
-            Assert.Equal(2, item.max);
-        });
-    }
-
-    [Fact]
-    public async Task GenerateConvertedMaintenancePlantReport_ShouldHandleNullPlantsList()
-    {
-        // Arrange
-        var report = _fixture.Build<KpiDetail>()
-                             .With(r => r.plants, (List<Plant>?)null)
-                             .Create();
-
-        var kpiFormula = _fixture.Build<KpiFormula>()
-                                 .With(f => f.formula, new Func<decimal, decimal>(x => x * 1.5m))
-                                 .Create();
-
-        // Act
-        var result = await InvokeGenerateConvertedMaintenancePlantReport(kpiFormula, report);
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Empty(result); // Should return empty list safely
-    }
-
-    [Fact]
-    public async Task GenerateConvertedMaintenancePlantReport_ShouldConvertNegativeValuesToZero()
-    {
-        // Arrange
-        var plant = _fixture.Build<Plant>()
-                            .With(p => p.actual, _fixture.Create<decimal>())
-                            .With(p => p.plantName, _fixture.Create<string>())
-                            .Create();
-
-        var report = _fixture.Build<KpiDetail>()
-                             .With(r => r.plants, new List<Plant> { plant })
-                             .Create();
-
-        var kpiFormula = _fixture.Build<KpiFormula>()
-                                 .With(f => f.formula, new Func<decimal, decimal>(x => -Math.Abs(x))) // always negative
-                                 .Create();
-
-        // Act
-        var result = await InvokeGenerateConvertedMaintenancePlantReport(kpiFormula, report);
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Single(result);
-        Assert.Equal(0, result.First().actualY); // negative converted to zero
-    }
-
-    // ✅ Helper method: invokes the private static method using reflection
-    private static Task<List<ConvertedKpiItemPlantDetails>> InvokeGenerateConvertedMaintenancePlantReport(
-        KpiFormula kpiFormula,
-        KpiDetail report)
-    {
-        var method = typeof(YourClassNameHere) // 🔁 Replace with the class where method is defined
-            .GetMethod("GenerateConvertedMaintenancePlantReport",
-                BindingFlags.NonPublic | BindingFlags.Static);
-
-        return (Task<List<ConvertedKpiItemPlantDetails>>)method!.Invoke(null, new object[] { kpiFormula, report })!;
-    }
+    public List<GetActivityTrackerLogsStoredProcedureResponse>? data { get; set; }
 }
+public class GetActivityTrackerLogsStoredProcedureResponse
+{
+    public string? firstName { get; set; }
+    public string? lastName { get; set; }
+    public Guid? sessionID { get; set; }
+    public int? employeeID { get; set; }
+    public string? screenName { get; set; }
+    public string? functionalityID { get; set; }
+    public string? functionalityName { get; set; }
+    public string? userAction { get; set; }
+    public string? affiliateID { get; set; } = string.Empty;
+    public string? affiliateName { get; set; } = string.Empty;
+    public DateTime? createdOn { get; set; }
+    public long? createdOnEpoch { get; set; } = null;
+    public string? userAgent { get; set; }
+    public string? browserName { get; set; }
+    public string? browserVersion { get; set; }
+    public string? browserLanguage { get; set; }
+    public string? clientIP { get; set; }
+    public string? serverIP { get; set; }
+
+}
+Task<GetActivityTrackerLogsRepositoryLayerResponse> GetActivityTrackerLogsAsync(int pageNumber, int pageSize, string keyword);
