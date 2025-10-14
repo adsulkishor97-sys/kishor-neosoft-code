@@ -1,6 +1,6 @@
 public class OverAllNumeratorRequest
 {
-    public AffiliateDistribution Item { get; set; }
+    public AffiliateDistribution? Item { get; set; }
     public string FormattedStartDate { get; set; } = string.Empty;
     public string FormattedEndDate { get; set; } = string.Empty;
     public string AffiliateRequest { get; set; } = string.Empty;
@@ -11,7 +11,7 @@ public class OverAllNumeratorRequest
 }
 private async Task<List<AssetGroupedData>> GetOverAllNumeratorAsync(OverAllNumeratorRequest req)
 {
-    var numQuery = ReplaceQuery(req.Item.overalN!, req.FormattedStartDate, req.FormattedEndDate,
+    var numQuery = ReplaceQuery(req.Item?.overalN!, req.FormattedStartDate, req.FormattedEndDate,
                                 req.AffiliateRequest, req.RequestRes, req.QuotedPmCodes, req.PlantId);
 
     var overAllNumResult = await _currentRepository.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
@@ -29,16 +29,18 @@ private async Task<List<AssetGroupedData>> GetOverAllNumeratorAsync(OverAllNumer
 
     return await GetAffDistFinalOverallNumAssetResult(overAllNumResult, req.Category);
 }
-var numeratorRequest = new OverAllNumeratorRequest
-{
-    Item = item,
-    FormattedStartDate = formatedStartDate,
-    FormattedEndDate = formatedEndDate,
-    AffiliateRequest = affiliateRequest,
-    RequestRes = requestRes,
-    QuotedPmCodes = quotedPmCodes,
-    PlantId = Convert.ToString(request.plantId)!,
-    Category = request.category
-};
 
-groupData = await GetOverAllNumeratorAsync(numeratorRequest);
+##Calling method ##
+ var numeratorRequest = new OverAllNumeratorRequest
+ {
+     Item = item,
+     FormattedStartDate = formatedStartDate,
+     FormattedEndDate = formatedEndDate,
+     AffiliateRequest = affiliateRequest,
+     RequestRes = requestRes,
+     QuotedPmCodes = quotedPmCodes,
+     PlantId = Convert.ToString(request.plantId)!,
+     Category = request.category
+ };
+
+ groupData = await GetOverAllNumeratorAsync(numeratorRequest);
