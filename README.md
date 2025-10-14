@@ -1,116 +1,17 @@
-using Xunit;
-using Moq;
-using AutoFixture;
-using Microsoft.AspNetCore.Mvc;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-
-public class AdminControllerTests
+private async Task<List<AssetGroupedData>> GetOverAllNumeratorAsync(AffiliateDistribution item, string formatedStartDate, string formatedEndDate, string affiliateRequest, GetAffiliatePlantDistributionRequest requestRes, string quotedPmCodes, string plantId, string category)
 {
-    private readonly IFixture _fixture;
-    private readonly Mock<IAdminServices> _adminServiceMock;
-    private readonly AdminController _controller;
-
-    public AdminControllerTests()
+    var numQuery = ReplaceQuery(item.overalN!, formatedStartDate, formatedEndDate, affiliateRequest, requestRes, quotedPmCodes, plantId);
+    var overAllNumResult = await _currentRepository.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(numQuery, reader => new KpiNumeratorDenominatorAffiliateDistribution
     {
-        _fixture = new Fixture();
-        _adminServiceMock = new Mock<IAdminServices>();
-        _controller = new AdminController(_adminServiceMock.Object);
-    }
-
-    [Fact]
-    public async Task GetUserActivityDataWithDynamicSearch_ShouldReturnOk_WhenDataExists()
-    {
-        // Arrange
-        var request = _fixture.Create<GetLoggingDataWithDynamicSearchRequest>();
-        var response = _fixture.Build<GetActivityTrackerLogsRepositoryLayerResponse>()
-                               .With(x => x.data, _fixture.CreateMany<GetActivityTrackerLogsStoredProcedureResponse>(3).ToList())
-                               .Create();
-
-        _adminServiceMock
-            .Setup(s => s.GetActivityTrackerLogsAsync(request.pageNumber, request.pageSize, request.keyword!))
-            .ReturnsAsync(response);
-
-        // Act
-        var result = await _controller.GetUserActivityDataWithDynamicSearch(request);
-
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var returnedData = Assert.IsType<GetActivityTrackerLogsRepositoryLayerResponse>(okResult.Value);
-
-        Assert.Equal(request.pageNumber, returnedData.pageNumber);
-        Assert.Equal(request.pageSize, returnedData.pageSize);
-        Assert.NotEmpty(returnedData.data!);
-        _adminServiceMock.Verify(s => s.GetActivityTrackerLogsAsync(request.pageNumber, request.pageSize, request.keyword!), Times.Once);
-    }
-
-    [Fact]
-    public async Task GetUserActivityDataWithDynamicSearch_ShouldReturnNoContent_WhenDataIsNull()
-    {
-        // Arrange
-        var request = _fixture.Create<GetLoggingDataWithDynamicSearchRequest>();
-        GetActivityTrackerLogsRepositoryLayerResponse? response = null;
-
-        _adminServiceMock
-            .Setup(s => s.GetActivityTrackerLogsAsync(request.pageNumber, request.pageSize, request.keyword!))
-            .ReturnsAsync(response);
-
-        // Act
-        var result = await _controller.GetUserActivityDataWithDynamicSearch(request);
-
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-        _adminServiceMock.Verify(s => s.GetActivityTrackerLogsAsync(request.pageNumber, request.pageSize, request.keyword!), Times.Once);
-    }
-
-    [Fact]
-    public async Task GetUserActivityDataWithDynamicSearch_ShouldReturnNoContent_WhenDataIsEmpty()
-    {
-        // Arrange
-        var request = _fixture.Create<GetLoggingDataWithDynamicSearchRequest>();
-        var response = _fixture.Build<GetActivityTrackerLogsRepositoryLayerResponse>()
-                               .With(x => x.data, new List<GetActivityTrackerLogsStoredProcedureResponse>())
-                               .Create();
-
-        _adminServiceMock
-            .Setup(s => s.GetActivityTrackerLogsAsync(request.pageNumber, request.pageSize, request.keyword!))
-            .ReturnsAsync(response);
-
-        // Act
-        var result = await _controller.GetUserActivityDataWithDynamicSearch(request);
-
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-        _adminServiceMock.Verify(s => s.GetActivityTrackerLogsAsync(request.pageNumber, request.pageSize, request.keyword!), Times.Once);
-    }
+        overallNumerator = reader["numerator"] != DBNull.Value ? Convert.ToDecimal(reader["numerator"]) : 0,
+        kpiid = reader["kpi_id"] != DBNull.Value ? Convert.ToInt32(reader["kpi_id"]) : 0,
+        sap_id = reader["sap_id"] != DBNull.Value ? Convert.ToString(reader["sap_id"]) : "",
+        template = reader["template"] != DBNull.Value ? Convert.ToString(reader["template"]) : "",
+        tidnr = reader["tidnr"] != DBNull.Value ? Convert.ToString(reader["tidnr"]) : "",
+        pltxt = reader["pltxt"] != DBNull.Value ? Convert.ToString(reader["pltxt"]) : "",
+        plantid = int.TryParse(plantId, out var plant) ? plant : 0
+    }) ?? new List<KpiNumeratorDenominatorAffiliateDistribution>();
+    return await GetAffDistFinalOverallNumAssetResult(overAllNumResult, category);
 }
-
-// ✅ Mock interface (must match your real one)
-public interface IAdminServices
-{
-    Task<GetActivityTrackerLogsRepositoryLayerResponse> GetActivityTrackerLogsAsync(int pageNumber, int pageSize, string keyword);
-}
-
-// ✅ Dummy controller (replace namespace/class name with yours)
-public class AdminController : ControllerBase
-{
-    private readonly IAdminServices _adminServices;
-
-    public AdminController(IAdminServices adminServices)
-    {
-        _adminServices = adminServices;
-    }
-
-    public async Task<IActionResult> GetUserActivityDataWithDynamicSearch(GetLoggingDataWithDynamicSearchRequest request)
-    {
-        var result = await _adminServices.GetActivityTrackerLogsAsync(request.pageNumber, request.pageSize, request.keyword!);
-        if (result == null || result.data == null || result.data.Count == 0)
-        {
-            return NoContent();
-        }
-
-        result.pageSize = request.pageSize;
-        result.pageNumber = request.pageNumber;
-        return Ok(result);
-    }
-}
+calling method 
+groupData = await GetOverAllNumeratorAsync(item, formatedStartDate, formatedEndDate, affiliateRequest, requestRes, quotedPmCodes, Convert.ToString(request.plantId)!, request.category);
