@@ -1,43 +1,34 @@
-public class QueryParameters
+public async Task<IActionResult> AddSearchHistoryBySearchKey(SearchHistoryRequest request)
 {
-    public string BaseQuery { get; set; } = string.Empty;
-    public string PmCodes { get; set; } = string.Empty;
-    public string AffiliateRequest { get; set; } = string.Empty;
-    public string FormattedStartDate { get; set; } = string.Empty;
-    public string FormattedEndDate { get; set; } = string.Empty;
-    public string StartDateTimeDate { get; set; } = string.Empty;
-    public string EndDateTimeDate { get; set; } = string.Empty;
-    public int PlantId { get; set; } = 0;
+    int userId = CommonMethod.GetEmployeeIdFromClaim(HttpContext);
+    int? searchHistoryId = await _searchHistoryServices.AddSearchHistoryBySearchKeyAsync(request, userId);
+    if (searchHistoryId == null || searchHistoryId <= 0)
+    {
+        return NoContent();
+    }
+    else
+    {
+        return Ok(searchHistoryId);
+    }
 }
-private static string PrepareQuery(QueryParameters parameters)
+public class SearchHistoryRequest
 {
-    return parameters.BaseQuery
-        .Replace("pmcodes", parameters.PmCodes)
-        .Replace("affiliateRequest", parameters.AffiliateRequest)
-        .Replace("startDate", parameters.FormattedStartDate)
-        .Replace("endDate", parameters.FormattedEndDate)
-        .Replace("formatedStartdate", parameters.StartDateTimeDate)
-        .Replace("formatedEnddate", parameters.EndDateTimeDate)
-        .Replace("StartDateyyyymmdd", parameters.FormattedStartDate)
-        .Replace("EndDateyyyymmdd", parameters.FormattedEndDate)
-        .Replace("StartDateyyyymm", parameters.StartDateTimeDate)
-        .Replace("EndDateyyyymm", parameters.EndDateTimeDate)
-        .Replace("plantIdList", parameters.PlantId.ToString());
+    public string? searchKey { get; set; }
+    public string? searchValue { get; set; }
+    
 }
-
-
-var firstQuery = jsonFileResponseList.FirstOrDefault()?.query ?? string.Empty;
-
-var queryParams = new QueryParameters
+public class SearchHistoryResponse
 {
-    BaseQuery = firstQuery,
-    PmCodes = pmcodes,
-    AffiliateRequest = affiliateRequest,
-    FormattedStartDate = formattedStartDate,
-    FormattedEndDate = formattedEndDate,
-    StartDateTimeDate = startDateTimeDate,
-    EndDateTimeDate = endDateTimeDate,
-    PlantId = request!.plantId!
-};
-
-var query = PrepareQuery(queryParams);
+    public int? userId { get; set; }
+    public string? searchKey { get; set; }
+    public string? searchValue { get; set; }
+    public string? createdOn { get; set; }
+}
+ public static int GetEmployeeIdFromClaim(HttpContext context)
+ {
+     var claims = context.User.Identity as ClaimsIdentity;
+     Claim? claimUID = claims!.Claims.FirstOrDefault(claim => claim.Type == "uid");
+     int createdBy = Convert.ToInt32(claimUID!.Value);
+     return createdBy;
+ }
+ Task<int?> AddSearchHistoryBySearchKeyAsync(SearchHistoryRequest searchHistoryRequest, int userId);
