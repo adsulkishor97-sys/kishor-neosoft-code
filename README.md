@@ -1,36 +1,56 @@
-[Fact]
-public async Task GenerateConvertedMaintenancePlantReport_ShouldReturn_ConvertedList()
+private static async Task<List<ConvertedKpiItemPlantDetails>> GenerateConvertedMaintenancePlantReport(KpiFormula kpiFormula, KpiDetail report)
 {
-    // Arrange
-    var fixture = new Fixture();
-
-    // Create a fake KPI formula
-    var kpiFormula = fixture.Build<KpiFormula>()
-                            .With(k => k.formula, new Func<decimal, decimal>(x => x / 100m)) // simple conversion
-                            .Create();
-
-    // Create a fake KpiDetail with plants
-    var report = fixture.Build<KpiDetail>()
-                        .With(r => r.plants, fixture.CreateMany<Plant>(3).ToList())
-                        .Create();
-
-    // Act: use reflection to call private static method
-    var method = typeof(YourClassContainingMethod)
-                 .GetMethod("GenerateConvertedMaintenancePlantReport", BindingFlags.NonPublic | BindingFlags.Static);
-
-    var task = (Task<List<ConvertedKpiItemPlantDetails>>)method!.Invoke(null, new object[] { kpiFormula, report })!;
-    var result = await task;
-
-    // Assert
-    Assert.NotNull(result);
-    Assert.Equal(report.plants.Count, result.Count);
-
-    foreach (var converted in result)
+    return await Task.Run(() =>
     {
-        Assert.NotNull(converted.plant);
-        Assert.InRange(converted.actualY, 0, decimal.MaxValue);
-        Assert.Equal("100%", converted.target);
-        Assert.Equal(0, converted.min);
-        Assert.Equal(2, converted.max);
-    }
+        var converted = new List<ConvertedKpiItemPlantDetails>();
+        foreach (var item in report.plants ?? new List<Plant>())
+        {
+            var yValue = kpiFormula.formula!(item.actual); // Convert % to decimal for formula
+            if (yValue < 0)
+                yValue = 0;
+            converted.Add(new ConvertedKpiItemPlantDetails
+            {
+                // kpi = item.kpi,
+                plant = item.plantName,
+                actualY = yValue,
+                target = "100%",
+                min = 0,
+                max = 2
+            });
+        }
+        return converted;
+    });
 }
+ public class KpiFormula
+ {
+     public string? name { get; set; }
+     public Func<decimal, decimal>? formula { get; set; }
+     public decimal target { get; set; }
+ }
+  public class KpiDetail
+ {
+     public string? kpi { get; set; }
+     public decimal average { get; set; }
+     public decimal target { get; set; }
+     public string? bestAffiliateName { get; set; }
+     public decimal bestAffiliate { get; set; }
+     public List<Affiliate>? affiliates { get; set; }
+     public List<Plant>? plants { get; set; }
+ }
+ public class Plant
+{
+
+    public string? plantName { get; set; }  // affiliate
+    public decimal actual { get; set; }
+    public decimal target { get; set; }
+    public int state { get; set; }
+}
+ public class ConvertedKpiItemPlantDetails
+ {
+     public string? kpi { get; set; }
+     public string? plant { get; set; }
+     public decimal actualY { get; set; }
+     public string? target { get; set; }
+     public decimal min { get; set; }
+     public decimal max { get; set; }
+ }
