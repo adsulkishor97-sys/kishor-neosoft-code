@@ -104,3 +104,4 @@ public class GenerateConvertedMaintenancePlantReportTests
         return (Task<List<ConvertedKpiItemPlantDetails>>)method!.Invoke(null, new object[] { kpiFormula, report })!;
     }
 }
+System.ArgumentException : Object of type 'AMHDomain.Models.Central.KpiFormula' cannot be converted to type 'AMHDomain.Models.Current.KpiDetail'.
