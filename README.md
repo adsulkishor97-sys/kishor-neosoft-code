@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using Xunit;
 using AutoFixture;
@@ -15,39 +16,38 @@ public class GenerateConvertedMaintenancePlantReportTests
     }
 
     [Fact]
-public async Task GenerateConvertedMaintenancePlantReport_ShouldReturnConvertedList_WhenPlantsExist()
-{
-    // Arrange
-    var plants = _fixture.Build<Plant>()
-                         .With(p => p.actual, _fixture.Create<decimal>())
-                         .With(p => p.plantName, _fixture.Create<string>())
-                         .CreateMany(3)
-                         .ToList();
+    public async Task GenerateConvertedMaintenancePlantReport_ShouldReturnConvertedList_WhenPlantsExist()
+    {
+        // Arrange
+        var plants = _fixture.Build<Plant>()
+                             .With(p => p.actual, _fixture.Create<decimal>())
+                             .With(p => p.plantName, _fixture.Create<string>())
+                             .CreateMany(3)
+                             .ToList();
 
-    var report = _fixture.Build<KpiDetail>()
-                         .With(x => x.plants, plants)
-                         .Create();
-
-    var kpiFormula = _fixture.Build<KpiFormula>()
-                             .With(f => f.formula, new Func<decimal, decimal>(x => x + _fixture.Create<decimal>()))
+        var report = _fixture.Build<KpiDetail>()
+                             .With(x => x.plants, plants)
                              .Create();
 
-    // Act — fix: correct parameter order
-    var result = await GenerateConvertedMaintenancePlantReport(kpiFormula, report);
+        var kpiFormula = _fixture.Build<KpiFormula>()
+                                 .With(f => f.formula, new Func<decimal, decimal>(x => x + _fixture.Create<decimal>()))
+                                 .Create();
 
-    // Assert
-    Assert.NotNull(result);
-    Assert.Equal(report.plants.Count, result.Count);
-    Assert.All(result, item =>
-    {
-        Assert.NotNull(item.plant);
-        Assert.True(item.actualY >= 0);
-        Assert.Equal("100%", item.target);
-        Assert.Equal(0, item.min);
-        Assert.Equal(2, item.max);
-    });
-}
+        // Act
+        var result = await InvokeGenerateConvertedMaintenancePlantReport(kpiFormula, report);
 
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(report.plants.Count, result.Count);
+        Assert.All(result, item =>
+        {
+            Assert.NotNull(item.plant);
+            Assert.True(item.actualY >= 0);
+            Assert.Equal("100%", item.target);
+            Assert.Equal(0, item.min);
+            Assert.Equal(2, item.max);
+        });
+    }
 
     [Fact]
     public async Task GenerateConvertedMaintenancePlantReport_ShouldHandleNullPlantsList()
@@ -62,11 +62,11 @@ public async Task GenerateConvertedMaintenancePlantReport_ShouldReturnConvertedL
                                  .Create();
 
         // Act
-        var result = await GenerateConvertedMaintenancePlantReport(report, kpiFormula);
+        var result = await InvokeGenerateConvertedMaintenancePlantReport(kpiFormula, report);
 
         // Assert
         Assert.NotNull(result);
-        Assert.Empty(result); // Should return empty list, not throw exception
+        Assert.Empty(result); // Should return empty list safely
     }
 
     [Fact]
@@ -83,26 +83,27 @@ public async Task GenerateConvertedMaintenancePlantReport_ShouldReturnConvertedL
                              .Create();
 
         var kpiFormula = _fixture.Build<KpiFormula>()
-                                 .With(f => f.formula, new Func<decimal, decimal>(x => -Math.Abs(x))) // Always negative
+                                 .With(f => f.formula, new Func<decimal, decimal>(x => -Math.Abs(x))) // always negative
                                  .Create();
 
         // Act
-        var result = await GenerateConvertedMaintenancePlantReport(report, kpiFormula);
+        var result = await InvokeGenerateConvertedMaintenancePlantReport(kpiFormula, report);
 
         // Assert
         Assert.NotNull(result);
         Assert.Single(result);
-        Assert.Equal(0, result.First().actualY); // negative values should become zero
+        Assert.Equal(0, result.First().actualY); // negative converted to zero
     }
 
-    // Helper: Calls the private static method directly for test purpose
-    private static Task<List<ConvertedKpiItemPlantDetails>> GenerateConvertedMaintenancePlantReport(KpiDetail report, KpiFormula kpiFormula)
+    // ✅ Helper method: invokes the private static method using reflection
+    private static Task<List<ConvertedKpiItemPlantDetails>> InvokeGenerateConvertedMaintenancePlantReport(
+        KpiFormula kpiFormula,
+        KpiDetail report)
     {
-        // Use reflection since the original method is static and private
-        var method = typeof(YourClassNameHere) // replace with the class where the static method lives
-            .GetMethod("GenerateConvertedMaintenancePlantReport", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        var method = typeof(YourClassNameHere) // 🔁 Replace with the class where method is defined
+            .GetMethod("GenerateConvertedMaintenancePlantReport",
+                BindingFlags.NonPublic | BindingFlags.Static);
 
         return (Task<List<ConvertedKpiItemPlantDetails>>)method!.Invoke(null, new object[] { kpiFormula, report })!;
     }
 }
-System.ArgumentException : Object of type 'AMHDomain.Models.Central.KpiFormula' cannot be converted to type 'AMHDomain.Models.Current.KpiDetail'.
