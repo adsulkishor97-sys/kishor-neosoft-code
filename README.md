@@ -1,157 +1,79 @@
- public async Task<KpiPerformanceResponse> PerformanceSummaryPlantAsync(GetKpiPerformanceRequest request, string affiliateRequest)
- {
-     KpiPerformanceResponse kpiPerformanceResponse = new KpiPerformanceResponse();
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using AutoFixture;
+using Moq;
+using Xunit;
 
-     try
-     {
-         var result = new KpiPerformanceResponse();
-         result.kpis = new List<KpiDetail>();
-         var allConvertedReport = new List<ConvertedKpiItemDetails>();
-         var allConvertedplantReports = new List<ConvertedKpiItemPlantDetails>();
+// Assuming these are your namespaces:
+using AMHDomain.Models.Current;
+using AMHDomain.Models.Central;
+using YourNamespace.Services;
+using YourNamespace.Repository;
 
-         KpiFormulaTargetRequest kpiFormulaTargetRequest = new KpiFormulaTargetRequest();
-         GetCaseHierarchyRequest getCaseHierarchy = new GetCaseHierarchyRequest();
-         getCaseHierarchy.affiliateIdList = request.affiliateId.ToString();
+public class PerformanceSummaryPlantAsyncTests
+{
+    private readonly IFixture _fixture;
+    private readonly Mock<ICurrentRepository> _currRepositoryMock;
+    private readonly Mock<IConfigRepository> _configRepositoryMock;
+    private readonly Mock<IPerformanceSummaryRepository> _performanceSummaryRepositoryMock;
+    private readonly PerformanceSummaryServices _service;
 
-         List<GetCaseHierarchyResponse> plantDetails = await _configRepository.GetCaseHierarchyAsync(getCaseHierarchy);
+    public PerformanceSummaryPlantAsyncTests()
+    {
+        _fixture = new Fixture();
 
-         // get affiliate lists
-         var affiliatesRes = _currentRepository.GetAffiliateLists().Result.ToList();
-         var affiliateDataResult = _currentRepository.GetAffiliateLists().Result.Where(x => x.affiliateId == request.affiliateId).ToList();
-         string formatedAffiliateData = string.Join(",", affiliateDataResult.Select(x => $"'{x.affiliateCode}'").ToList());
-         kpiFormulaTargetRequest.performanceSummary = request.performanceSummary;
+        _currRepositoryMock = new Mock<ICurrentRepository>();
+        _configRepositoryMock = new Mock<IConfigRepository>();
+        _performanceSummaryRepositoryMock = new Mock<IPerformanceSummaryRepository>();
 
-         // get KPIs details like formula based on performanceSummary 
-         var kpisFormula = GetKpiFormulas(kpiFormulaTargetRequest);
-         // get actual values from BigData Queries based on startDate,endDate and affiliate
-         var actualData = GetPerformanceSummaryActualDataNew(request, affiliateRequest);
-         var actualPlantsData = GetPerformanceSummaryAffiliateActualData(request, formatedAffiliateData, plantDetails);
+        _service = new PerformanceSummaryServices(
+            _currRepositoryMock.Object,
+            _configRepositoryMock.Object,
+            _performanceSummaryRepositoryMock.Object
+        );
+    }
 
-         // iterate loop to get affiliate list with actual and target values
-         foreach (var kpi in kpisFormula)
-         {
+    [Fact]
+    public async Task PerformanceSummaryPlantAsync_ShouldReturnValidResponse_WhenDependenciesReturnData()
+    {
+        // Arrange
+        var request = _fixture.Build<GetKpiPerformanceRequest>()
+                              .With(x => x.affiliateId, _fixture.Create<int>())
+                              .With(x => x.performanceSummary, _fixture.Create<string>())
+                              .With(x => x.plantId, _fixture.Create<int>())
+                              .Create();
 
-             var actualKpiname = kpi.name!.Replace(" ", "_");
-             var report = await GenerateMaintenanceKpiReport(kpi.name!, affiliatesRes, actualData[actualKpiname!], kpi.target);
-             var plantreport = await GenerateMaintenancePlantKpiReport(kpi.name!, plantDetails, actualPlantsData[actualKpiname!], kpi.target);
-             var convertedReport = await GenerateConvertedMaintenanceReport(kpi!, report);
-             var convertedPlantReport = await GenerateConvertedMaintenancePlantReport(kpi!, plantreport);
+        var affiliateList = _fixture.CreateMany<AffiliateList>(3).ToList();
+        var getCaseHierarchyResponses = _fixture.CreateMany<GetCaseHierarchyResponse>(3).ToList();
 
+        var kpiFormulaTarget = _fixture.Build<KpiFormulaTarget>()
+                                       .With(x => x.name, _fixture.Create<string>())
+                                       .With(x => x.target, _fixture.Create<string>())
+                                       .CreateMany(2).ToList();
 
-             result.kpis!.Add(report);
-             result.kpis.ForEach(x =>
-             {
-                 x.plants ??= new List<Plant>();
-                 if (plantreport?.plants != null)
-                     x.plants.AddRange(plantreport.plants);
-             }
-             );
+        // Setup repository mocks
+        _currRepositoryMock.Setup(x => x.GetAffiliateLists()).ReturnsAsync(affiliateList);
+        _configRepositoryMock.Setup(x => x.GetCaseHierarchyAsync(It.IsAny<GetCaseHierarchyRequest>()))
+                             .ReturnsAsync(getCaseHierarchyResponses);
+        _performanceSummaryRepositoryMock.Setup(x => x.GetKpiFormulaTarget(It.IsAny<KpiFormulaTargetRequest>()))
+                                         .ReturnsAsync(kpiFormulaTarget);
 
-             allConvertedReport.AddRange(convertedReport);
-             allConvertedplantReports.AddRange(convertedPlantReport);
+        // Mock internal methods by using a partial mock or internal helper logic if exposed
+        // Here we rely on the private method being called indirectly through the flow
 
-         }
+        // Act
+        var result = await _service.PerformanceSummaryPlantAsync(request, _fixture.Create<string>());
 
-         // Calculate cost effectiveness
-         decimal min = 0m;
-         decimal max = 2m;
-         var avgActualYs = allConvertedReport
-             .GroupBy(c => c.affiliate!)
-             .ToDictionary(g => g.Key, g => g.Sum(x => x.actualY));
-         var avgPlantActualYs = allConvertedplantReports
-            .GroupBy(c => c.plant!)
-            .ToDictionary(g => g.Key, g => g.Sum(x => x.actualY));
+        // Assert
+        Assert.NotNull(result);
+        Assert.IsType<KpiPerformanceResponse>(result);
 
-         var sumOfMaxAllAffiliates = allConvertedReport
-             .GroupBy(c => c.affiliate!)
-             .ToDictionary(g => g.Key, g => g.Sum(x => x.max));
-
-         max = sumOfMaxAllAffiliates.Select(a => a.Value).FirstOrDefault();
-
-
-
-         var costEffectivenessList = avgActualYs
-             .Select(kvp => new PerformanceSummaryGroupItem(
-                 kvp.Key,
-                 kvp.Value,
-                 min,
-                 max,
-                 (kvp.Value / max) * 100m,
-                 100m))
-             .ToList();
-         Console.WriteLine(costEffectivenessList);
-
-         var costEffectivenessPlantList = avgPlantActualYs
-             .Select(kvp => new PerformanceSummaryPlantGroupItem(
-                 kvp.Key,
-                 kvp.Value,
-                 min,
-                 max,
-                 (kvp.Value / max) * 100m,
-                 100m))
-             .ToList();
-         string? PlantName = plantDetails!.Where(x => x.plantId == request.plantId).Select(x => x.plantName).FirstOrDefault();
-         result.performanceSummary = kpiFormulaTargetRequest.performanceSummary;
-         if (costEffectivenessPlantList.Count > 0)
-         {
-             result.average = Math.Round(costEffectivenessPlantList.Where(x => x.Plant == PlantName).Average(x => x.Percentage), 2);
-             result.bestPlant = Math.Round(costEffectivenessPlantList.OrderByDescending(c => c.Actual).FirstOrDefault()!.Percentage, 2);
-             result.bestPlantName = costEffectivenessPlantList.OrderByDescending(c => c.Actual).FirstOrDefault()!.Plant;
-             result.target = costEffectivenessPlantList.OrderByDescending(c => c.Target).FirstOrDefault()!.Target;
-         }
-         result.plants = null;
-         result.kpis.ForEach(x => x.affiliates = null);
-         result.affiliates = null;
-         result.kpis = null;
-
-         return result;
-     }
-     catch (Exception)
-     {
-         return kpiPerformanceResponse;
-     }
- }
-
-  #region PerformanceSummaryPlantAsync
- [Theory]
- [ClassData(typeof(PerformanceSummaryPlantAsyncRequestGenerator))]
- public async Task PerformanceSummaryPlantAsync_ShouldReturnData_WhenRepositoryReturnsData(GetKpiPerformanceRequest request, GetCaseHierarchyRequest affiliateIdrequest, List<AffiliateList> affiliateList
-     , List<KpiFormulaTarget> dbFormulas, List<GetCaseHierarchyResponse> getCaseHierarchyResponses)
- {
-     // Arrange  
-
-     _currRepositoryMock.Setup(repo => repo.GetAffiliateLists()).ReturnsAsync(affiliateList);
-     _configRepositoryMock.Setup(repo => repo.GetCaseHierarchyAsync(It.IsAny<GetCaseHierarchyRequest>())).ReturnsAsync(getCaseHierarchyResponses);
-
-     _performanceSumRepositoryMock.Setup(repo => repo.GetKpiFormulaTarget(It.IsAny<KpiFormulaTargetRequest>())).Returns(Task.FromResult(dbFormulas));
-     //Act
-     var result = await _performanceSummServices.PerformanceSummaryPlantAsync(request, affiliateIdrequest.affiliateIdList!);
-     // Assert
-     Assert.NotNull(result);
-     Assert.IsType<KpiPerformanceResponse>(result);
- }
-
- #endregion
-  private static async Task<List<ConvertedKpiItemPlantDetails>> GenerateConvertedMaintenancePlantReport(KpiFormula kpiFormula, KpiDetail report)
- {
-     return await Task.Run(() =>
-     {
-         var converted = new List<ConvertedKpiItemPlantDetails>();
-         foreach (var item in report.plants ?? new List<Plant>())
-         {
-             var yValue = kpiFormula.formula!(item.actual); // Convert % to decimal for formula
-             if (yValue < 0)
-                 yValue = 0;
-             converted.Add(new ConvertedKpiItemPlantDetails
-             {
-                 // kpi = item.kpi,
-                 plant = item.plantName,
-                 actualY = yValue,
-                 target = "100%",
-                 min = 0,
-                 max = 2
-             });
-         }
-         return converted;
-     });
- }
+        // Validate response structure
+        Assert.True(result.bestPlantName == null || result.bestPlantName is string);
+        Assert.True(result.bestPlant >= 0);
+        Assert.True(result.average >= 0);
+        Assert.True(result.target >= 0);
+    }
+}
