@@ -1,28 +1,25 @@
-[Fact]
-public void CompileFormula_ShouldReturnCompiledFunction_ThatEvaluatesExpressionCorrectly()
+private static async Task<KpiDetail> GenerateMaintenancePlantKpiReport(string kpiName, List<GetCaseHierarchyResponse> plantDetails, Dictionary<int, decimal> actuals, decimal targetValue)
 {
-    // Arrange
-    var fixture = new Fixture();
+    return await Task.Run(() =>
+    {
+        var data = (from plants in plantDetails
+                    where actuals.ContainsKey((int)plants.plantId!)
+                    let actualValue = actuals.ContainsKey((int)plants!.plantId!) ? actuals[(int)plants.plantId!] : 0
+                    let state = actualValue > targetValue ? 1 : 0
+                    select new Plant
+                    {
+                        plantName = plants.plantName,
+                        actual = actualValue,
+                        target = targetValue,
+                        state = state
+                    }).ToList();
 
-    // Generate a random positive multiplier (no hardcoded values)
-    var multiplier = fixture.Create<decimal>();
-    var expression = $"x * {multiplier}";
 
-    // Use reflection to get the private static method
-    var method = typeof(PerformanceSummaryServices)
-        .GetMethod("CompileFormula", BindingFlags.NonPublic | BindingFlags.Static);
 
-    Assert.NotNull(method); // sanity check
-
-    // Act
-    var func = (Func<decimal, decimal>)method!.Invoke(null, new object[] { expression })!;
-    
-    // Execute the returned function with a random decimal
-    var inputValue = fixture.Create<decimal>();
-    var result = func(inputValue);
-
-    // Assert
-    Assert.IsType<decimal>(result);
-    Assert.Equal(inputValue * multiplier, result);
-    Assert.True(result >= 0 || result <= 0); // valid numeric output
+        return new KpiDetail
+        {
+            kpi = kpiName,
+            plants = data.OrderBy(a => a.actual).ToList()
+        };
+    });
 }
