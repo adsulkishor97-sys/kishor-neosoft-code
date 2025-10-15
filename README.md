@@ -106,3 +106,4 @@ public async Task PerformanceSummaryPlantAsync_ShouldExecuteFullFlow_AndReturnCo
     Assert.False(string.IsNullOrWhiteSpace(result.bestPlantName));
     Assert.NotNull(result.performanceSummary);
 }
+System.ArgumentException : Expression of type 'System.Collections.Generic.List`1[AMHDomain.Models.Central.KpiFormula]' cannot be used for return type 'System.Collections.Generic.List`1[AMHDomain.Models.Central.KpiFormulaTarget]'
