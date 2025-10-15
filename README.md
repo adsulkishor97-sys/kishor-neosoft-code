@@ -4,32 +4,36 @@ public async Task GenerateMaintenancePlantKpiReport_ShouldReturnKpiDetail_WithOr
     // Arrange
     var fixture = new Fixture();
 
-    // Randomly create a KPI name
+    // Random KPI name
     var kpiName = fixture.Create<string>();
 
-    // Generate random plant details
+    // Generate unique plant details (avoid duplicate plantId)
     var plantDetails = fixture.Build<GetCaseHierarchyResponse>()
-                              .With(x => x.plantId, fixture.Create<int>())
-                              .With(x => x.plantName, fixture.Create<string>())
+                              .Without(x => x.plantId)
+                              .With(x => x.plantName, () => fixture.Create<string>())
                               .CreateMany(3)
+                              .Select((p, index) => 
+                              {
+                                  p.plantId = index + 1; // assign unique IDs
+                                  return p;
+                              })
                               .ToList();
 
-    // Generate random actual values dictionary matching plant IDs
+    // Now all plantIds are unique, so dictionary won't throw
     var actuals = plantDetails.ToDictionary(
         p => (int)p.plantId!,
         p => fixture.Create<decimal>()
     );
 
-    // Generate a random positive target value
-    var targetValue = fixture.Create<decimal>() > 0 ? fixture.Create<decimal>() : 1m;
+    var targetValue = Math.Abs(fixture.Create<decimal>()); // ensure positive
 
     // Use reflection to access the private static method
     var method = typeof(PerformanceSummaryServices)
         .GetMethod("GenerateMaintenancePlantKpiReport", BindingFlags.NonPublic | BindingFlags.Static);
 
-    Assert.NotNull(method); // sanity check
+    Assert.NotNull(method);
 
-    // Act: invoke method using reflection
+    // Act
     var task = (Task<KpiDetail>)method!.Invoke(null, new object[] { kpiName, plantDetails, actuals, targetValue })!;
     var result = await task;
 
@@ -38,12 +42,11 @@ public async Task GenerateMaintenancePlantKpiReport_ShouldReturnKpiDetail_WithOr
     Assert.Equal(kpiName, result.kpi);
     Assert.NotNull(result.plants);
     Assert.NotEmpty(result.plants);
-    Assert.True(result.plants.All(p => p.actual >= 0));
-    Assert.True(result.plants.All(p => p.target == targetValue));
     Assert.All(result.plants, p => Assert.False(string.IsNullOrWhiteSpace(p.plantName)));
+    Assert.All(result.plants, p => Assert.True(p.actual >= 0));
+    Assert.All(result.plants, p => Assert.Equal(targetValue, p.target));
 
-    // Verify plants are ordered by actual ascending
+    // Verify plants are ordered ascending by actual
     var ordered = result.plants.OrderBy(p => p.actual).ToList();
     Assert.Equal(ordered.Select(p => p.actual), result.plants.Select(p => p.actual));
 }
-System.ArgumentException : An item with the same key has already been added. Key: 16
