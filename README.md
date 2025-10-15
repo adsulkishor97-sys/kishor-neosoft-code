@@ -46,3 +46,4 @@ public async Task GenerateMaintenancePlantKpiReport_ShouldReturnKpiDetail_WithOr
     var ordered = result.plants.OrderBy(p => p.actual).ToList();
     Assert.Equal(ordered.Select(p => p.actual), result.plants.Select(p => p.actual));
 }
+System.ArgumentException : An item with the same key has already been added. Key: 16
