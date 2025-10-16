@@ -1,6 +1,7 @@
 public async Task<KpiPerformanceResponse> PerformanceSummaryAffiliateAsync(GetKpiPerformanceRequest request, string affiliateRequest)
 {
     KpiPerformanceResponse kpiPerformanceResponse = new KpiPerformanceResponse();
+
     try
     {
         var result = new KpiPerformanceResponse
@@ -8,31 +9,39 @@ public async Task<KpiPerformanceResponse> PerformanceSummaryAffiliateAsync(GetKp
             kpis = new List<KpiDetail>()
         };
 
-        KpiFormulaTargetRequest kpiFormulaTargetRequest = new KpiFormulaTargetRequest();
-        GetCaseHierarchyRequest getCaseHierarchy = new GetCaseHierarchyRequest
+        if (request == null)
+            return kpiPerformanceResponse;
+
+        var kpiFormulaTargetRequest = new KpiFormulaTargetRequest
+        {
+            performanceSummary = request.performanceSummary
+        };
+
+        var getCaseHierarchy = new GetCaseHierarchyRequest
         {
             affiliateIdList = request.affiliateId.ToString()
         };
 
-        var plantDetails = await _configRepository.GetCaseHierarchyAsync(getCaseHierarchy);
-        var affiliatesRes = _currentRepository.GetAffiliateLists().Result.ToList();
+        // Fetch data safely
+        var plantDetails = await _configRepository.GetCaseHierarchyAsync(getCaseHierarchy) ?? new List<GetCaseHierarchyResponse>();
+        var affiliatesRes = (await _currentRepository.GetAffiliateLists())?.ToList() ?? new List<AffiliateList>();
 
-        kpiFormulaTargetRequest.performanceSummary = request.performanceSummary;
-
-        var affiliateCodeList = affiliatesRes.Select(x => $"'{x.affiliateCode}'").ToList();
+        var affiliateCodeList = affiliatesRes?.Select(x => $"'{x.affiliateCode}'").ToList() ?? new List<string>();
         var affiliateCodeString = string.Join(",", affiliateCodeList);
 
-        var kpisFormula = GetKpiFormulas(kpiFormulaTargetRequest);
-        var actualData = GetPerformanceSummaryActualDataNew(request, affiliateCodeString);
-        var actualPlantsData = GetPerformanceSummaryAffiliateActualData(request, affiliateRequest, plantDetails);
+        // Protected/private data fetch methods
+        var kpisFormula = GetKpiFormulas(kpiFormulaTargetRequest) ?? new List<KpiFormulaTarget>();
+        var actualData = GetPerformanceSummaryActualDataNew(request, affiliateCodeString) ?? new Dictionary<string, Dictionary<int, decimal>>();
+        var actualPlantsData = GetPerformanceSummaryAffiliateActualData(request, affiliateRequest, plantDetails) ?? new Dictionary<string, Dictionary<int, decimal>>();
 
-        // Call the extracted private method
-        PopulateKpisAndCostEffectiveness(result, kpisFormula, affiliatesRes, plantDetails, actualData, actualPlantsData, kpiFormulaTargetRequest.performanceSummary);
+        // Safely process all
+        PopulateKpisAndCostEffectiveness(result, kpisFormula, affiliatesRes, plantDetails, actualData, actualPlantsData, kpiFormulaTargetRequest.performanceSummary ?? string.Empty);
 
         return result;
     }
     catch (Exception)
     {
+        // In case of any unexpected error, return default response safely
         return kpiPerformanceResponse;
     }
 }
@@ -49,45 +58,66 @@ private void PopulateKpisAndCostEffectiveness(
     var allConvertedReports = new List<ConvertedKpiItemDetails>();
     var allConvertedPlantReports = new List<ConvertedKpiItemPlantDetails>();
 
+    if (kpisFormula == null || !kpisFormula.Any())
+        return;
+
     foreach (var kpi in kpisFormula)
     {
-        // 🔹 FIXED: use kpi.kpi instead of kpi.name
-        var actualKpiname = kpi.kpi!.Replace(" ", "_");
+        if (string.IsNullOrWhiteSpace(kpi?.name))
+            continue;
 
-        var report = GenerateMaintenanceKpiReport(kpi.kpi!, affiliatesRes, actualData[actualKpiname!], kpi.target).Result;
-        var plantreport = GenerateMaintenancePlantKpiReport(kpi.kpi!, plantDetails, actualPlantsData[actualKpiname!], kpi.target).Result;
+        var actualKpiName = kpi.name.Replace(" ", "_");
+
+        if (!actualData.ContainsKey(actualKpiName) || !actualPlantsData.ContainsKey(actualKpiName))
+            continue;
+
+        // Protected/async method calls
+        var report = GenerateMaintenanceKpiReport(kpi.name, affiliatesRes, actualData[actualKpiName], kpi.target).Result;
+        var plantReport = GenerateMaintenancePlantKpiReport(kpi.name, plantDetails, actualPlantsData[actualKpiName], kpi.target).Result;
         var convertedReport = GenerateConvertedMaintenanceReport(kpi, report).Result;
-        var convertedPlantReport = GenerateConvertedMaintenancePlantReport(kpi, plantreport).Result;
+        var convertedPlantReport = GenerateConvertedMaintenancePlantReport(kpi, plantReport).Result;
 
-        result.kpis!.Add(report);
-        result.kpis.Where(x => x.kpi == kpi.kpi).ToList().ForEach(x =>
+        if (report != null)
+            result.kpis?.Add(report);
+
+        var existing = result.kpis?.Where(x => x.kpi == kpi.name).ToList();
+        if (existing != null && existing.Any())
         {
-            x.plants ??= new List<Plant>();
-            if (plantreport?.plants != null)
-                x.plants.AddRange(plantreport.plants);
-        });
+            foreach (var x in existing)
+            {
+                x.plants ??= new List<Plant>();
+                if (plantReport?.plants != null)
+                    x.plants.AddRange(plantReport.plants);
+            }
+        }
 
-        allConvertedReports.AddRange(convertedReport);
-        allConvertedPlantReports.AddRange(convertedPlantReport);
+        if (convertedReport != null)
+            allConvertedReports.AddRange(convertedReport);
+        if (convertedPlantReport != null)
+            allConvertedPlantReports.AddRange(convertedPlantReport);
     }
 
-    // Calculate cost effectiveness
+    // Cost effectiveness
     decimal min = 0m;
     decimal max = 2m;
 
-    var avgActualYs = allConvertedReports
+    var avgActualYs = allConvertedReports?
+        .Where(c => c?.affiliate != null)
         .GroupBy(c => c.affiliate!)
-        .ToDictionary(g => g.Key, g => g.Sum(x => x.actualY));
+        .ToDictionary(g => g.Key, g => g.Sum(x => x.actualY)) ?? new Dictionary<string, decimal>();
 
-    var avgPlantActualYs = allConvertedPlantReports
+    var avgPlantActualYs = allConvertedPlantReports?
+        .Where(c => c?.plant != null)
         .GroupBy(c => c.plant!)
-        .ToDictionary(g => g.Key, g => g.Sum(x => x.actualY));
+        .ToDictionary(g => g.Key, g => g.Sum(x => x.actualY)) ?? new Dictionary<string, decimal>();
 
-    var sumOfMaxAllAffiliates = allConvertedReports
+    var sumOfMaxAllAffiliates = allConvertedReports?
+        .Where(c => c?.affiliate != null)
         .GroupBy(c => c.affiliate!)
-        .ToDictionary(g => g.Key, g => g.Sum(x => x.max));
+        .ToDictionary(g => g.Key, g => g.Sum(x => x.max)) ?? new Dictionary<string, decimal>();
 
-    max = sumOfMaxAllAffiliates.Select(a => a.Value).FirstOrDefault();
+    if (sumOfMaxAllAffiliates.Any())
+        max = sumOfMaxAllAffiliates.Select(a => a.Value).FirstOrDefault();
 
     var costEffectivenessList = avgActualYs
         .Select(kvp => new PerformanceSummaryGroupItem(
@@ -95,7 +125,7 @@ private void PopulateKpisAndCostEffectiveness(
             kvp.Value,
             min,
             max,
-            (kvp.Value / max) * 100m,
+            max > 0 ? (kvp.Value / max) * 100m : 0m,
             100m))
         .ToList();
 
@@ -105,18 +135,18 @@ private void PopulateKpisAndCostEffectiveness(
             kvp.Value,
             min,
             max,
-            (kvp.Value / max) * 100m,
+            max > 0 ? (kvp.Value / max) * 100m : 0m,
             100m))
         .ToList();
 
     result.performanceSummary = performanceSummary;
 
-    if (costEffectivenessPlantList.Count > 0)
+    if (costEffectivenessPlantList.Count > 0 && costEffectivenessList.Count > 0)
     {
         result.average = Math.Round(costEffectivenessList.Average(x => x.percentage), 2);
-        result.bestAffiliate = Math.Round(costEffectivenessList.OrderByDescending(c => c.actual).FirstOrDefault()!.percentage, 2);
-        result.bestAffiliateName = costEffectivenessList.OrderByDescending(c => c.actual).FirstOrDefault()!.affiliate;
-        result.target = costEffectivenessList.OrderByDescending(c => c.target).FirstOrDefault()!.target;
+        result.bestAffiliate = Math.Round(costEffectivenessList.OrderByDescending(c => c.actual).FirstOrDefault()?.percentage ?? 0, 2);
+        result.bestAffiliateName = costEffectivenessList.OrderByDescending(c => c.actual).FirstOrDefault()?.affiliate ?? string.Empty;
+        result.target = costEffectivenessList.OrderByDescending(c => c.target).FirstOrDefault()?.target ?? 0;
         result.plants = costEffectivenessPlantList.Select(kvp => new Plant
         {
             plantName = kvp.Plant,
@@ -125,6 +155,6 @@ private void PopulateKpisAndCostEffectiveness(
         }).ToList();
     }
 
-    result.kpis.ForEach(x => x.affiliates = null);
+    result.kpis?.ForEach(x => x.affiliates = null);
     result.affiliates = null;
 }
