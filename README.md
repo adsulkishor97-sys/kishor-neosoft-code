@@ -127,3 +127,14 @@ private void PopulateKpisAndCostEffectiveness(
     result.kpis.ForEach(x => x.affiliates = null);
     result.affiliates = null;
 }
+public class KpiFormulaTarget
+{
+    public string? performanceSummary { get; set; }
+    public string? kpi { get; set; }
+    public int kpiNo { get; set; }
+    public string? formula { get; set; }
+    public int target { get; set; }
+    public string? direction { get; set; }
+    public double minimum { get; set; }
+    public double maximum { get; set; }
+}
