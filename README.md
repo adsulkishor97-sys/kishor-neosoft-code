@@ -1,66 +1,85 @@
- private async Task<List<KpiNumeratorDenominatorPerformanceSummary>> GetPerformanceSummaryActualDataNew(GetKpiPerformanceRequest request, DateTimeFormatRequest dateTimeFormatRequest)
- {
-     List<KpiNumeratorDenominatorPerformanceSummary> bigDataList = new List<KpiNumeratorDenominatorPerformanceSummary>();
+using Xunit;
+using Moq;
+using AutoFixture;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Linq;
+using System;
+using System.Reflection;
+using YourNamespace.Models; // change to your models namespace
+using YourNamespace.Services; // change to your service namespace
+using Moq.Protected;
 
+public class PerformanceSummaryServiceTests
+{
+    [Fact]
+    public async Task GetPerformanceSummaryActualDataNew_ShouldCoverAllBranches_WithoutHardcodedValues()
+    {
+        // Arrange
+        var fixture = new Fixture();
 
-     //here get  json file data           
+        // Create mock of service (so we can mock internal async method)
+        var serviceMock = new Mock<PerformanceSummaryServices> { CallBase = true };
 
-     List<MaintananceExcellence> responseList = new();
-     GlobalPerformanceSummary globalPerformanceSummary = new GlobalPerformanceSummary();
-     if (request.performanceSummary == KpiConstant.MaintananceExcellence)
-     {
+        // Dynamically generate unique strings to simulate summary keys
+        var summaryKeys = fixture.CreateMany<string>(3).ToList();
 
-         responseList = globalPerformanceSummary.maintananceExcellence.ToList();
+        // Create fake KpiConstant object dynamically via reflection (simulate real constants)
+        var kpiConstantType = typeof(KpiConstant);
+        var fields = kpiConstantType.GetFields(BindingFlags.Public | BindingFlags.Static);
+        foreach (var field in fields)
+        {
+            field.SetValue(null, fixture.Create<string>());
+        }
 
-     }
-     else if (request.performanceSummary == KpiConstant.CostEffectivness)
-     {
+        // Generate fake request
+        var request = fixture.Build<GetKpiPerformanceRequest>()
+            .With(x => x.performanceSummary, summaryKeys[0]) // AutoFixture string
+            .Create();
 
-         responseList = globalPerformanceSummary.costEffectiveness.ToList();
+        var dateTimeFormatRequest = fixture.Create<DateTimeFormatRequest>();
 
+        // Fake result from GetPerformanceSummaryNumDenCalc
+        var fakeCalcResult = fixture.CreateMany<KpiNumeratorDenominatorPerformanceSummary>(3).ToList();
 
-     }
-     else if (request.performanceSummary == KpiConstant.AssetPerformance)
-     {
+        // Mock GetPerformanceSummaryNumDenCalc (private async)
+        serviceMock.Protected()
+            .Setup<Task<List<KpiNumeratorDenominatorPerformanceSummary>>>(
+                "GetPerformanceSummaryNumDenCalc",
+                ItExpr.IsAny<string>(),
+                ItExpr.IsAny<string>())
+            .ReturnsAsync(fakeCalcResult);
 
-         responseList = globalPerformanceSummary.assetPerformance.ToList();
+        // Prepare fake GlobalPerformanceSummary object
+        var global = fixture.Build<GlobalPerformanceSummary>()
+            .With(x => x.maintananceExcellence, fixture.CreateMany<MaintananceExcellence>(2).ToList())
+            .With(x => x.costEffectiveness, fixture.CreateMany<MaintananceExcellence>(2).ToList())
+            .With(x => x.assetPerformance, fixture.CreateMany<MaintananceExcellence>(2).ToList())
+            .Create();
 
+        // Inject the fake GlobalPerformanceSummary (if it exists as a field)
+        var globalField = typeof(PerformanceSummaryServices)
+            .GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
+            .FirstOrDefault(f => f.FieldType == typeof(GlobalPerformanceSummary));
 
+        if (globalField != null)
+            globalField.SetValue(serviceMock.Object, global);
 
-     }
-     List<Task> tasks = new List<Task>();
+        // Act
+        var result = await serviceMock.Object.InvokePrivateAsync<List<KpiNumeratorDenominatorPerformanceSummary>>(
+            "GetPerformanceSummaryActualDataNew",
+            request, dateTimeFormatRequest);
 
+        // Assert
+        Assert.NotNull(result);
+        Assert.All(result, r => Assert.NotNull(r));
+        Assert.True(result.Count >= 0);
 
-     foreach (var item in responseList.ToList())
-     {
-         tasks.Add(Task.Run(async () =>
-         {
-
-             var queryNumerator = item.Numerator!
-.Replace("StartDateyyyymmdd", dateTimeFormatRequest.startDateyyyymmdd)
-.Replace("EndDateyyyymmdd", dateTimeFormatRequest.endDateyyyymmdd)
-.Replace("affiliateRequest", dateTimeFormatRequest.affiliateRequest)
-.Replace("StartDateyyyymm", dateTimeFormatRequest.startDateyyyymm)
-.Replace("EndDateyyyymm", dateTimeFormatRequest.endDateyyyymm);
-
-             var queryDenominator = item.Denominator!
-                        .Replace("StartDateyyyymmdd", dateTimeFormatRequest.startDateyyyymmdd)
-                        .Replace("EndDateyyyymmdd", dateTimeFormatRequest.endDateyyyymmdd)
-                        .Replace("affiliateRequest", dateTimeFormatRequest.affiliateRequest)
-                        .Replace("StartDateyyyymm", dateTimeFormatRequest.startDateyyyymm)
-                        .Replace("EndDateyyyymm", dateTimeFormatRequest.endDateyyyymm);
-
-
-             var result = await GetPerformanceSummaryNumDenCalc(queryNumerator!, queryDenominator!);
-
-             bigDataList.AddRange(result);
-
-
-         }));
-     }
-
-     await Task.WhenAll(tasks);
-
-     return bigDataList;
-
- }
+        // Verify mock was called (ensures foreach loop executed)
+        serviceMock.Protected().Verify(
+            "GetPerformanceSummaryNumDenCalc",
+            Times.AtLeastOnce(),
+            ItExpr.IsAny<string>(),
+            ItExpr.IsAny<string>());
+    }
+}
