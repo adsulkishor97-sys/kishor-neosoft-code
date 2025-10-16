@@ -10,27 +10,27 @@ public async Task PerformanceSummaryAffiliateAsync_ShouldExecuteFullFlow_WithAct
         .With(x => x.performanceSummary, fixture.Create<string>())
         .Create();
 
-    // Sample plant hierarchy
     var plantDetails = fixture.CreateMany<GetCaseHierarchyResponse>(3).ToList();
     _configRepositoryMock.Setup(x => x.GetCaseHierarchyAsync(It.IsAny<GetCaseHierarchyRequest>()))
         .ReturnsAsync(plantDetails);
 
-    // Sample affiliates
     var affiliateList = fixture.CreateMany<AffiliateList>(3).ToList();
     _currRepositoryMock.Setup(x => x.GetAffiliateLists())
         .ReturnsAsync(affiliateList);
 
-    // Sample KPI formulas
     var kpiFormulas = fixture.CreateMany<KpiFormulaTarget>(2).ToList();
     _performanceSumRepositoryMock
         .Setup(x => x.GetKpiFormulaTarget(It.IsAny<KpiFormulaTargetRequest>()))
         .ReturnsAsync(kpiFormulas);
 
-    // Use the actual service class (no mocking of protected methods)
+    var _configurationMock = new Mock<IConfiguration>();
+
+    // Use correct constructor with 4 parameters
     var service = new PerformanceSummaryServices(
-        _configRepositoryMock.Object,
+        _performanceSumRepositoryMock.Object,
         _currRepositoryMock.Object,
-        _performanceSumRepositoryMock.Object
+        _configurationMock.Object,
+        _configRepositoryMock.Object
     );
 
     // Act
@@ -42,21 +42,11 @@ public async Task PerformanceSummaryAffiliateAsync_ShouldExecuteFullFlow_WithAct
     // Assert
     Assert.NotNull(result);
     Assert.IsType<KpiPerformanceResponse>(result);
-
-    // Ensure protected methods actually ran and populated kpis & plants
     Assert.NotNull(result.kpis);
-    Assert.True(result.kpis.Count > 0, "Kpi list should be populated");
-
-    Assert.True(result.average >= 0, "Average percentage should be calculated");
-    Assert.True(result.bestAffiliate >= 0, "Best affiliate should be calculated");
-    Assert.False(string.IsNullOrWhiteSpace(result.bestAffiliateName), "Best affiliate name should be set");
-
+    Assert.True(result.kpis.Count > 0);
+    Assert.True(result.average >= 0);
+    Assert.True(result.bestAffiliate >= 0);
+    Assert.False(string.IsNullOrWhiteSpace(result.bestAffiliateName));
     Assert.NotNull(result.plants);
-    Assert.True(result.plants.Count > 0, "Plants list should be populated after cost effectiveness calculation");
+    Assert.True(result.plants.Count > 0);
 }
- public PerformanceSummaryServices(IPerformanceSummaryRepository performanceSummaryRepository, ICurrentRepository currentRepository, IConfiguration configuration, IConfigRepository configRepository)
- {
-     _currentRepository = currentRepository;
-     _configRepository = configRepository;
-     _performanceSummaryRepository = performanceSummaryRepository;
- }
