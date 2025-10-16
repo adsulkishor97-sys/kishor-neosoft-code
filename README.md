@@ -54,3 +54,9 @@ public async Task PerformanceSummaryAffiliateAsync_ShouldExecuteFullFlow_WithAct
     Assert.NotNull(result.plants);
     Assert.True(result.plants.Count > 0, "Plants list should be populated after cost effectiveness calculation");
 }
+ public PerformanceSummaryServices(IPerformanceSummaryRepository performanceSummaryRepository, ICurrentRepository currentRepository, IConfiguration configuration, IConfigRepository configRepository)
+ {
+     _currentRepository = currentRepository;
+     _configRepository = configRepository;
+     _performanceSummaryRepository = performanceSummaryRepository;
+ }
