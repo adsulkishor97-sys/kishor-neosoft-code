@@ -37,7 +37,6 @@ public async Task<KpiPerformanceResponse> PerformanceSummaryAffiliateAsync(GetKp
     }
 }
 
-// Extracted private helper
 private void PopulateKpisAndCostEffectiveness(
     KpiPerformanceResponse result,
     List<KpiFormulaTarget> kpisFormula,
@@ -52,14 +51,16 @@ private void PopulateKpisAndCostEffectiveness(
 
     foreach (var kpi in kpisFormula)
     {
-        var actualKpiname = kpi.name!.Replace(" ", "_");
-        var report = GenerateMaintenanceKpiReport(kpi.name!, affiliatesRes, actualData[actualKpiname!], kpi.target).Result;
-        var plantreport = GenerateMaintenancePlantKpiReport(kpi.name!, plantDetails, actualPlantsData[actualKpiname!], kpi.target).Result;
+        // 🔹 FIXED: use kpi.kpi instead of kpi.name
+        var actualKpiname = kpi.kpi!.Replace(" ", "_");
+
+        var report = GenerateMaintenanceKpiReport(kpi.kpi!, affiliatesRes, actualData[actualKpiname!], kpi.target).Result;
+        var plantreport = GenerateMaintenancePlantKpiReport(kpi.kpi!, plantDetails, actualPlantsData[actualKpiname!], kpi.target).Result;
         var convertedReport = GenerateConvertedMaintenanceReport(kpi, report).Result;
         var convertedPlantReport = GenerateConvertedMaintenancePlantReport(kpi, plantreport).Result;
 
         result.kpis!.Add(report);
-        result.kpis.Where(x => x.kpi == kpi.name).ToList().ForEach(x =>
+        result.kpis.Where(x => x.kpi == kpi.kpi).ToList().ForEach(x =>
         {
             x.plants ??= new List<Plant>();
             if (plantreport?.plants != null)
@@ -126,15 +127,4 @@ private void PopulateKpisAndCostEffectiveness(
 
     result.kpis.ForEach(x => x.affiliates = null);
     result.affiliates = null;
-}
-public class KpiFormulaTarget
-{
-    public string? performanceSummary { get; set; }
-    public string? kpi { get; set; }
-    public int kpiNo { get; set; }
-    public string? formula { get; set; }
-    public int target { get; set; }
-    public string? direction { get; set; }
-    public double minimum { get; set; }
-    public double maximum { get; set; }
 }
