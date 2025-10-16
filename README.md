@@ -47,3 +47,18 @@ public async Task GetPerformanceSummaryActualDataNew_ShouldSelect_CorrectRespons
         Times.AtLeastOnce(),
         ItExpr.IsAny<string>(), ItExpr.IsAny<string>());
 }
+
+// Act
+var taskObj = method.Invoke(serviceMock.Object, new object[] { request, dateTimeFormatRequest });
+Assert.NotNull(taskObj); // Prevent null reference
+
+var result = await (Task<List<KpiNumeratorDenominatorPerformanceSummary>>)taskObj!;
+
+// Assert
+Assert.NotNull(result);
+Assert.NotEmpty(result);
+serviceMock.Protected().Verify(
+    "GetPerformanceSummaryNumDenCalc",
+    Times.AtLeastOnce(),
+    ItExpr.IsAny<string>(), ItExpr.IsAny<string>());
+
