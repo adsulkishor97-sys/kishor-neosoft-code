@@ -80,3 +80,4 @@ public class PerformanceSummaryServicesTests
             ItExpr.IsAny<string>(), ItExpr.IsAny<List<AffiliateList>>(), ItExpr.IsAny<Dictionary<int, decimal>>(), ItExpr.IsAny<decimal>());
     }
 }
+ System.ArgumentException : No protected method PerformanceSummaryServices.GenerateMaintenanceKpiReport found whose signature is compatible with the provided arguments (string, List<AffiliateList>, Dictionary<int, decimal>, decimal).
