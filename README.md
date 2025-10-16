@@ -29,7 +29,7 @@ public async Task PerformanceSummaryAffiliateAsync_ShouldReturnData_WithFullFlow
     // Act
     var result = await _performanceSummServices.PerformanceSummaryAffiliateAsync(
         request,
-        affiliateList.First().affiliateCode // pass any affiliate code
+        affiliateList[0].affiliateCode.ToString() // pass any affiliate code
     );
 
     // Assert
@@ -41,9 +41,10 @@ public async Task PerformanceSummaryAffiliateAsync_ShouldReturnData_WithFullFlow
     Assert.True(result.kpis.Count > 0);
 
     // Ensure cost effectiveness calculation executes
-    Assert.True(result.average >= 0 || result.average == 0); 
+    Assert.True(result.average >= 0 || result.average == 0);
     Assert.True(result.bestAffiliate >= 0 || result.bestAffiliate == 0);
     Assert.False(string.IsNullOrWhiteSpace(result.bestAffiliateName));
     Assert.NotNull(result.plants);
     Assert.True(result.plants.Count > 0);
 }
+ Assert.NotNull() Failure: Value is null
