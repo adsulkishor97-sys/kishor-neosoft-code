@@ -1,18 +1,18 @@
 [Fact]
-public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUserIsAdmin()
+public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUserIsCorporate()
 {
     // Arrange
     var fixture = new Fixture();
 
-    // Mock HttpContext
+    // Create a valid HttpContext with Corporate role
     var httpContext = new DefaultHttpContext();
     var user = new ClaimsPrincipal(new ClaimsIdentity(new[]
     {
-        new Claim(ClaimTypes.Role, Constants.admin)
+        new Claim(ClaimTypes.Role, Constants.corporate)
     }, "mock"));
     httpContext.User = user;
 
-    // ✅ Generate a valid Base64URL-encoded JWT
+    // ✅ Generate syntactically valid Base64URL-encoded JWT
     string headerJson = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
     string payloadJson = $"{{\"user\":\"{fixture.Create<string>()}\"}}";
 
@@ -24,10 +24,10 @@ public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUser
 
     httpContext.Request.Headers["Authorization"] = $"Bearer {validJwt}";
 
-    _httpContextAccessor.Setup(x => x.HttpContext).Returns(httpContext);
+    _httpContextAccessorMock.Setup(x => x.HttpContext).Returns(httpContext);
 
     // Act
-    var result = _mockconfigServices.GetCaseHierarchyTokenAccessDetails();
+    var result = _service.GetCaseHierarchyTokenAccessDetails();
 
     // Assert
     Assert.NotNull(result);
@@ -37,12 +37,12 @@ public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUser
 }
 
 /// <summary>
-/// Helper method to create Base64URL-safe strings compatible with JWTs.
+/// Helper to produce JWT-compatible Base64URL strings.
 /// </summary>
 private static string Base64UrlEncode(byte[] input)
 {
     return Convert.ToBase64String(input)
-        .TrimEnd('=')            // remove padding
-        .Replace('+', '-')       // 62nd char of encoding
-        .Replace('/', '_');      // 63rd char of encoding
+        .TrimEnd('=')
+        .Replace('+', '-')
+        .Replace('/', '_');
 }
