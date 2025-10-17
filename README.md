@@ -36,3 +36,12 @@ public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUser
     Assert.Null(result.tokenAffiliateIds);
     Assert.Null(result.tokenPlantIds);
 }
+  Microsoft.IdentityModel.Tokens.SecurityTokenMalformedException : IDX12709: CanReadToken() returned false. JWT is not well formed.
+  The token needs to be in JWS or JWE Compact Serialization Format. (JWS): 'EncodedHeader.EncodedPayload.EncodedSignature'. (JWE): 'EncodedProtectedHeader.EncodedEncryptedKey.EncodedInitializationVector.EncodedCiphertext.EncodedAuthenticationTag'.
+
+Stack Trace: 
+  JwtSecurityTokenHandler.ReadJwtToken(String token)
+  ConfigServices.GetCaseHierarchyTokenAccessDetails() line 126
+  ConfigTests.GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUserIsAdmin() line 316
+  RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+  MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
