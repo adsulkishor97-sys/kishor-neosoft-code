@@ -1,5 +1,5 @@
 [Fact]
-public async Task HandleAvailabilityKpi_ShouldReturnProcessedData_WhenRepositoryReturnsValidData()
+public async Task HandleAvailabilityKpi_ShouldReturnProcessedData()
 {
     // Arrange
     var fixture = new Fixture();
@@ -7,7 +7,6 @@ public async Task HandleAvailabilityKpi_ShouldReturnProcessedData_WhenRepository
     var item = fixture.Build<AffiliateDistribution>()
                       .With(x => x.overalN, fixture.Create<string>())
                       .Create();
-
     var affiliateRequest1 = fixture.Create<string>();
     var request = fixture.Create<GetAffiliatePlantDistributionRequest>();
     var startDate = fixture.Create<string>();
@@ -16,44 +15,30 @@ public async Task HandleAvailabilityKpi_ShouldReturnProcessedData_WhenRepository
 
     var fakeData = fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(3).ToList();
 
-    // ✅ Mock repository
-    var repoMock = new Mock<ICurrentRepository>();
-    repoMock.Setup(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
+    var mockRepo = new Mock<ICurrentRepository>();
+    mockRepo.Setup(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
         It.IsAny<string>(),
         It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()))
         .ReturnsAsync(fakeData);
 
-    // ✅ Mock or create service instance properly
-    var currentServices = new CurrentServices(repoMock.Object /* add other deps if needed */);
+    var currServices = new CurrentServices(mockRepo.Object /*, other deps */);
 
-    // ✅ Access private instance method
+    // Access private method
     var method = typeof(CurrentServices).GetMethod(
         "HandleAvailabilityKpi",
         BindingFlags.NonPublic | BindingFlags.Instance);
-
     Assert.NotNull(method);
 
-    try
+    // Act
+    var task = (Task<List<GroupedData>>)method!.Invoke(currServices, new object[]
     {
-        // ✅ Invoke method using reflection
-        var taskObj = method!.Invoke(currentServices, new object[]
-        {
-            item, affiliateRequest1, request, startDate, endDate, quotedPmCodes
-        });
+        item, affiliateRequest1, request, startDate, endDate, quotedPmCodes
+    })!;
+    var result = await task;
 
-        // ✅ Await properly and catch real inner exceptions
-        var task = (Task<List<GroupedData>>)taskObj!;
-        var result = await task;
-
-        // ✅ Assertions
-        Assert.NotNull(result);
-        repoMock.Verify(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
-            It.IsAny<string>(),
-            It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()), Times.Once);
-    }
-    catch (TargetInvocationException ex)
-    {
-        // 🔍 Unwrap actual cause to see what’s null
-        throw ex.InnerException ?? ex;
-    }
+    // Assert
+    Assert.NotNull(result);
+    mockRepo.Verify(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
+        It.IsAny<string>(),
+        It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()), Times.Once);
 }
