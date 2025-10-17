@@ -12,19 +12,18 @@ public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUser
     }, "mock"));
     httpContext.User = user;
 
-    // ✅ Dynamically generate a syntactically valid (but dummy) JWT token
-    var header = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-        $"{{\"alg\":\"{fixture.Create<string>()}\",\"typ\":\"JWT\"}}"
-    ));
-    var payload = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-        $"{{\"user\":\"{fixture.Create<string>()}\"}}"
-    ));
-    var signature = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(fixture.Create<string>()));
+    // ✅ Generate a valid Base64URL-encoded JWT
+    string headerJson = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
+    string payloadJson = $"{{\"user\":\"{fixture.Create<string>()}\"}}";
 
-    var fakeJwtToken = $"{header}.{payload}.{signature}";
-    httpContext.Request.Headers["Authorization"] = $"Bearer {fakeJwtToken}";
+    string header = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(headerJson));
+    string payload = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(payloadJson));
+    string signature = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(fixture.Create<string>()));
 
-    // Mock HttpContextAccessor
+    string validJwt = $"{header}.{payload}.{signature}";
+
+    httpContext.Request.Headers["Authorization"] = $"Bearer {validJwt}";
+
     _httpContextAccessor.Setup(x => x.HttpContext).Returns(httpContext);
 
     // Act
@@ -36,12 +35,14 @@ public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUser
     Assert.Null(result.tokenAffiliateIds);
     Assert.Null(result.tokenPlantIds);
 }
-  Microsoft.IdentityModel.Tokens.SecurityTokenMalformedException : IDX12709: CanReadToken() returned false. JWT is not well formed.
-  The token needs to be in JWS or JWE Compact Serialization Format. (JWS): 'EncodedHeader.EncodedPayload.EncodedSignature'. (JWE): 'EncodedProtectedHeader.EncodedEncryptedKey.EncodedInitializationVector.EncodedCiphertext.EncodedAuthenticationTag'.
 
-Stack Trace: 
-  JwtSecurityTokenHandler.ReadJwtToken(String token)
-  ConfigServices.GetCaseHierarchyTokenAccessDetails() line 126
-  ConfigTests.GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUserIsAdmin() line 316
-  RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
-  MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/// <summary>
+/// Helper method to create Base64URL-safe strings compatible with JWTs.
+/// </summary>
+private static string Base64UrlEncode(byte[] input)
+{
+    return Convert.ToBase64String(input)
+        .TrimEnd('=')            // remove padding
+        .Replace('+', '-')       // 62nd char of encoding
+        .Replace('/', '_');      // 63rd char of encoding
+}
