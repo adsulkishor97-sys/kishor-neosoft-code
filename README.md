@@ -1,42 +1,43 @@
-[Fact]
-public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_NonAdminAccess_WithDecryptedIds()
+    [Fact]
+    public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_NonAdminAccess_WithDecryptedIds()
+    {
+        // Arrange
+        var jwtSettings = new JwtSettings { SecretKey = "test-secret-key" };
+
+        var crypt = new CryptographyHelper(jwtSettings);
+        var encryptedAffiliate = crypt.AesGcmEncrypt("101");
+        var encryptedPlant = crypt.AesGcmEncrypt("501");
+
+        var claims = new List<Claim>
 {
-    // Arrange
-    var fixture = new Fixture();
-    var jwtSettings = new JwtSettings { SecretKey = "test-secret-key" };
+    new Claim("affiliateID", encryptedAffiliate),
+    new Claim("plantID", encryptedPlant)
+};
 
-    var crypt = new CryptographyHelper(jwtSettings);
-    var encryptedAffiliate = crypt.AesGcmEncrypt("101");
-    var encryptedPlant = crypt.AesGcmEncrypt("501");
+        var token = new JwtSecurityToken(claims: claims);
+        var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
 
-    var claims = new List<Claim>
-    {
-        new Claim("affiliateID", encryptedAffiliate),
-        new Claim("plantID", encryptedPlant)
-    };
+        var user = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+    new Claim(ClaimTypes.Role, "user")
+}, "mock"));
 
-    var token = new JwtSecurityToken(claims: claims);
-    var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+        var httpContext = new DefaultHttpContext();
+        httpContext.User = user;
+        httpContext.Request.Headers["Authorization"] = $"Bearer {tokenString}";
 
-    var user = new ClaimsPrincipal(new ClaimsIdentity(new[]
-    {
-        new Claim(ClaimTypes.Role, "user")
-    }, "mock"));
+        _httpContextAccessor.Setup(x => x.HttpContext).Returns(httpContext);
 
-    var httpContext = new DefaultHttpContext();
-    httpContext.User = user;
-    httpContext.Request.Headers["Authorization"] = $"Bearer {tokenString}";
+        var service = new ConfigServices(mockConfigRepository.Object, _jwtSettings.Object, _httpContextAccessor.Object);
 
-    _httpContextAccessorMock.Setup(x => x.HttpContext).Returns(httpContext);
+        // Act
+        var result = service.GetCaseHierarchyTokenAccessDetails();
 
-    var service = new YourServiceClass(_httpContextAccessorMock.Object, jwtSettings);
-
-    // Act
-    var result = service.GetCaseHierarchyTokenAccessDetails();
-
-    // Assert
-    Assert.NotNull(result);
-    Assert.Equal("non-admin", result.accessRole);
-    Assert.Contains("101", result.tokenAffiliateIds);
-    Assert.Contains("501", result.tokenPlantIds);
-}
+        // Assert
+        Assert.NotNull(result);
+        Assert.NotNull(result.tokenAffiliateIds);
+        Assert.NotNull(result.tokenPlantIds);
+        Assert.Equal("non-admin", result.accessRole);
+        Assert.Contains("101", result.tokenAffiliateIds);
+        Assert.Contains("501", result.tokenPlantIds);
+    }
