@@ -2,39 +2,46 @@
 public async Task HandleAvailabilityKpi_ShouldReturnProcessedData_WhenRepositoryReturnsValidData()
 {
     // Arrange
-    var item = _fixture.Build<AffiliateDistribution>()
-                       .With(x => x.overalN, _fixture.Create<string>())
-                       .Create();
+    var fixture = new Fixture();
 
-    var affiliateRequest1 = _fixture.Create<string>();
-    var request = _fixture.Create<GetAffiliatePlantDistributionRequest>();
-    var startDate = _fixture.Create<string>();
-    var endDate = _fixture.Create<string>();
-    var quotedPmCodes = _fixture.Create<string>();
+    var item = fixture.Build<AffiliateDistribution>()
+                      .With(x => x.overalN, fixture.Create<string>())
+                      .Create();
 
-    var fakeData = _fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(3).ToList();
+    var affiliateRequest1 = fixture.Create<string>();
+    var request = fixture.Create<GetAffiliatePlantDistributionRequest>();
+    var startDate = fixture.Create<string>();
+    var endDate = fixture.Create<string>();
+    var quotedPmCodes = fixture.Create<string>();
 
-    _currRepositoryMock
-        .Setup(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
-            It.IsAny<string>(),
-            It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()))
+    var fakeData = fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(3).ToList();
+
+    var mockRepo = new Mock<ICurrentRepository>();
+    mockRepo.Setup(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
+        It.IsAny<string>(),
+        It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()))
         .ReturnsAsync(fakeData);
 
-    // Use reflection to access the private async *instance* method
-    var method = typeof(CurrentServices).GetMethod("HandleAvailabilityKpi",
-                    BindingFlags.NonPublic | BindingFlags.Instance);
+    // 🔹 Properly initialize your service with the mock repo
+    var currentServices = new CurrentServices(mockRepo.Object /*, other deps if required */);
+
+    // Use reflection to get the private instance method
+    var method = typeof(CurrentServices).GetMethod(
+        "HandleAvailabilityKpi",
+        BindingFlags.NonPublic | BindingFlags.Instance);
+
+    Assert.NotNull(method); // sanity check
 
     // Act
-    var task = (Task<List<GroupedData>>)method!.Invoke(_currServices, new object[]
+    var task = (Task<List<GroupedData>>)method!.Invoke(currentServices, new object[]
     {
         item, affiliateRequest1, request, startDate, endDate, quotedPmCodes
     })!;
-
     var result = await task;
 
     // Assert
     Assert.NotNull(result);
-    _currRepositoryMock.Verify(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
+    mockRepo.Verify(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
         It.IsAny<string>(),
         It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()), Times.Once);
 }
