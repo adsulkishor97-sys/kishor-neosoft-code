@@ -1,77 +1,51 @@
-[Fact]
-public async Task HandleAffiliateDistributionNonGlobalPageRequest_ShouldReturnGroupedData_WithValidInputs()
-{
-    // Arrange
+ public CaseHierarchyTokenAccessDetails GetCaseHierarchyTokenAccessDetails()
+ {
+     var httpContext = _httpContextAccessor.HttpContext;
+     CryptographyHelper crypt = new(_jwtSettings);
+     var authHeader = httpContext?.Request.Headers.Authorization.FirstOrDefault();
+     var token = authHeader?["Bearer ".Length..];
 
-    // Mock the repository
-    var mockRepo = new Mock<ICurrentRepository>();
+     var handler = new JwtSecurityTokenHandler();
+     var jwtToken = handler.ReadJwtToken(token);
 
-    // Generate input request using AutoFixture
-    var request = _fixture.Build<GetAffiliatePlantDistributionRequest>()
-                          .With(x => x.affiliateId, _fixture.Create<int>())
-                          .With(x => x.kpiCode, _fixture.Create<string>())
-                          .Create();
+     var user = httpContext!.User;
 
-    var affiliateRequest = _fixture.Create<string>();
-    var formattedStartDate = _fixture.Create<string>();
-    var formattedEndDate = _fixture.Create<string>();
-    var quotedPmCodes = _fixture.Create<string>();
+     if (user.IsInRole(Constants.admin) || user.IsInRole(Constants.corporate))
+     {
+         return new CaseHierarchyTokenAccessDetails
+         {
+             accessRole = "admin",
+             tokenAffiliateIds=null,
+             tokenPlantIds=null
+         };
+     }
 
-    // Mock GetCaseHierarchyAsync to return some plants
-    var lstPlants = _fixture.CreateMany<GetCaseHierarchyResponse>(3).ToList();
-    mockRepo.Setup(r => r.GetCaseHierarchyAsync(It.IsAny<int>()))
-            .ReturnsAsync(lstPlants);
+     // get affiliates from Token
+     List<string> affiliateData = new();
+     var affiliateIDList = jwtToken.Claims.Where(x => x.Type == "affiliateID").Select(x => x.Value).ToList()!;
+     affiliateIDList.ForEach(x =>
+     {
+         if (!string.IsNullOrEmpty(x))
+         {
+             affiliateData.Add(crypt.AesGcmDecrypt(x));
+         }
+     });
 
-    // Mock ExecuteBigDataQuery_New for numerator
-    var numResult = _fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(3).ToList();
-    mockRepo.Setup(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
-            It.Is<string>(q => q.Contains("N")),
-            It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()))
-        .ReturnsAsync(numResult);
+     // get plants from Token
+     List<string> plantData = new();
+     var plantIDList = jwtToken.Claims.Where(x => x.Type == "plantID").Select(x => x.Value).ToList()!;
+     plantIDList.ForEach(x =>
+     {
+         if (!string.IsNullOrEmpty(x))
+         {
+             plantData.Add(crypt.AesGcmDecrypt(x));
+         }
+     });
 
-    // Mock ExecuteBigDataQuery_New for denominator
-    var denResult = _fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(3).ToList();
-    mockRepo.Setup(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
-            It.Is<string>(q => q.Contains("D")),
-            It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()))
-        .ReturnsAsync(denResult);
-
-    // Create the service instance
-    var service = (CurrentServices)Activator.CreateInstance(
-        typeof(CurrentServices),
-        BindingFlags.Instance | BindingFlags.NonPublic,
-        null,
-        new object[] { mockRepo.Object }, // pass repo if only dependency
-        null
-    )!;
-
-    // Get private method via reflection
-    var method = typeof(CurrentServices)
-        .GetMethod("HandleAffiliateDistributionNonGlobalPageRequest", BindingFlags.NonPublic | BindingFlags.Instance);
-
-    Assert.NotNull(method);
-
-    // Act: Invoke private async method
-    var task = (Task<List<GroupedData>>)method!.Invoke(
-        service,
-        new object[] { request, affiliateRequest, formattedStartDate, formattedEndDate, quotedPmCodes }
-    )!;
-
-    var result = await task;
-
-    // Assert
-    Assert.NotNull(result);
-    Assert.NotEmpty(result);
-
-    // Ensure the returned data is valid
-    Assert.All(result, item =>
-    {
-        Assert.NotNull(item);
-    });
-
-    // Verify repository calls
-    mockRepo.Verify(r => r.GetCaseHierarchyAsync(It.IsAny<int>()), Times.Once);
-    mockRepo.Verify(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
-        It.IsAny<string>(), It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()), Times.AtLeastOnce);
-}
-System.MissingMethodException : Constructor on type 'AMHInfrastructure.Services.CurrentServices' not found.
+     return new CaseHierarchyTokenAccessDetails
+     {
+         accessRole = "non-admin",
+         tokenAffiliateIds = affiliateData,
+         tokenPlantIds = plantData
+     };
+ }
