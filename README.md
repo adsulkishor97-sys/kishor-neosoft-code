@@ -1,48 +1,55 @@
 [Fact]
-public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUserIsCorporate()
+public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_NonAdminAccess_WithDecryptedIds()
 {
     // Arrange
     var fixture = new Fixture();
 
-    // Create a valid HttpContext with Corporate role
-    var httpContext = new DefaultHttpContext();
+    // Generate random values using AutoFixture
+    var jwtSettings = new JwtSettings { SecretKey = fixture.Create<string>() };
+    var crypt = new CryptographyHelper(jwtSettings);
+
+    var randomAffiliateId = fixture.Create<int>().ToString();
+    var randomPlantId = fixture.Create<int>().ToString();
+
+    var encryptedAffiliate = crypt.AesGcmEncrypt(randomAffiliateId);
+    var encryptedPlant = crypt.AesGcmEncrypt(randomPlantId);
+
+    var claims = new List<Claim>
+    {
+        new Claim("affiliateID", encryptedAffiliate),
+        new Claim("plantID", encryptedPlant)
+    };
+
+    // Generate JWT dynamically
+    var token = new JwtSecurityToken(claims: claims);
+    var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+
+    var randomRole = fixture.Create<string>(); // Non-admin role
+
     var user = new ClaimsPrincipal(new ClaimsIdentity(new[]
     {
-        new Claim(ClaimTypes.Role, Constants.corporate)
+        new Claim(ClaimTypes.Role, randomRole)
     }, "mock"));
-    httpContext.User = user;
 
-    // ✅ Generate syntactically valid Base64URL-encoded JWT
-    string headerJson = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
-    string payloadJson = $"{{\"user\":\"{fixture.Create<string>()}\"}}";
+    var httpContext = new DefaultHttpContext
+    {
+        User = user
+    };
 
-    string header = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(headerJson));
-    string payload = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(payloadJson));
-    string signature = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(fixture.Create<string>()));
-
-    string validJwt = $"{header}.{payload}.{signature}";
-
-    httpContext.Request.Headers["Authorization"] = $"Bearer {validJwt}";
+    // Set Authorization header dynamically
+    httpContext.Request.Headers["Authorization"] = $"Bearer {tokenString}";
 
     _httpContextAccessorMock.Setup(x => x.HttpContext).Returns(httpContext);
 
+    // Create instance of the service under test
+    var service = new ConfigServices(_httpContextAccessorMock.Object, jwtSettings);
+
     // Act
-    var result = _service.GetCaseHierarchyTokenAccessDetails();
+    var result = service.GetCaseHierarchyTokenAccessDetails();
 
     // Assert
     Assert.NotNull(result);
-    Assert.Equal("admin", result.accessRole);
-    Assert.Null(result.tokenAffiliateIds);
-    Assert.Null(result.tokenPlantIds);
-}
-
-/// <summary>
-/// Helper to produce JWT-compatible Base64URL strings.
-/// </summary>
-private static string Base64UrlEncode(byte[] input)
-{
-    return Convert.ToBase64String(input)
-        .TrimEnd('=')
-        .Replace('+', '-')
-        .Replace('/', '_');
+    Assert.Equal("non-admin", result.accessRole);
+    Assert.Contains(randomAffiliateId, result.tokenAffiliateIds);
+    Assert.Contains(randomPlantId, result.tokenPlantIds);
 }
