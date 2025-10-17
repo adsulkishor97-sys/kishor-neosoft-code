@@ -1,51 +1,95 @@
- public CaseHierarchyTokenAccessDetails GetCaseHierarchyTokenAccessDetails()
- {
-     var httpContext = _httpContextAccessor.HttpContext;
-     CryptographyHelper crypt = new(_jwtSettings);
-     var authHeader = httpContext?.Request.Headers.Authorization.FirstOrDefault();
-     var token = authHeader?["Bearer ".Length..];
+[Fact]
+public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUserIsAdmin()
+{
+    // Arrange
+    var fixture = new Fixture();
+    var httpContext = new DefaultHttpContext();
+    var user = new ClaimsPrincipal(new ClaimsIdentity(new[]
+    {
+        new Claim(ClaimTypes.Role, Constants.admin)
+    }, "mock"));
+    httpContext.User = user;
 
-     var handler = new JwtSecurityTokenHandler();
-     var jwtToken = handler.ReadJwtToken(token);
+    string headerJson = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
+    string payloadJson = $"{{\"user\":\"{fixture.Create<string>()}\"}}";
 
-     var user = httpContext!.User;
+    string header = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(headerJson));
+    string payload = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(payloadJson));
+    string signature = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(fixture.Create<string>()));
 
-     if (user.IsInRole(Constants.admin) || user.IsInRole(Constants.corporate))
-     {
-         return new CaseHierarchyTokenAccessDetails
-         {
-             accessRole = "admin",
-             tokenAffiliateIds=null,
-             tokenPlantIds=null
-         };
-     }
+    string validJwt = $"{header}.{payload}.{signature}";
 
-     // get affiliates from Token
-     List<string> affiliateData = new();
-     var affiliateIDList = jwtToken.Claims.Where(x => x.Type == "affiliateID").Select(x => x.Value).ToList()!;
-     affiliateIDList.ForEach(x =>
-     {
-         if (!string.IsNullOrEmpty(x))
-         {
-             affiliateData.Add(crypt.AesGcmDecrypt(x));
-         }
-     });
+    httpContext.Request.Headers.Authorization = $"Bearer {validJwt}";
 
-     // get plants from Token
-     List<string> plantData = new();
-     var plantIDList = jwtToken.Claims.Where(x => x.Type == "plantID").Select(x => x.Value).ToList()!;
-     plantIDList.ForEach(x =>
-     {
-         if (!string.IsNullOrEmpty(x))
-         {
-             plantData.Add(crypt.AesGcmDecrypt(x));
-         }
-     });
+    _httpContextAccessor.Setup(x => x.HttpContext).Returns(httpContext);
 
-     return new CaseHierarchyTokenAccessDetails
-     {
-         accessRole = "non-admin",
-         tokenAffiliateIds = affiliateData,
-         tokenPlantIds = plantData
-     };
- }
+    // Act
+    var result = _mockconfigServices.GetCaseHierarchyTokenAccessDetails();
+
+    // Assert
+    Assert.NotNull(result);
+    Assert.Equal("admin", result.accessRole);
+    Assert.Null(result.tokenAffiliateIds);
+    Assert.Null(result.tokenPlantIds);
+}
+
+[Fact]
+public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUserIsCorporate()
+{
+    // Arrange
+    var fixture = new Fixture();
+    var httpContext = new DefaultHttpContext();
+    var user = new ClaimsPrincipal(new ClaimsIdentity(new[]
+    {
+        new Claim(ClaimTypes.Role, Constants.corporate)
+    }, "mock"));
+    httpContext.User = user;
+
+    string headerJson = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
+    string payloadJson = $"{{\"user\":\"{fixture.Create<string>()}\"}}";
+
+    string header = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(headerJson));
+    string payload = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(payloadJson));
+    string signature = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(fixture.Create<string>()));
+
+    string validJwt = $"{header}.{payload}.{signature}";
+
+    httpContext.Request.Headers.Authorization = $"Bearer {validJwt}";
+
+    _httpContextAccessor.Setup(x => x.HttpContext).Returns(httpContext);
+
+    // Act
+    var result = _mockconfigServices.GetCaseHierarchyTokenAccessDetails();
+
+    // Assert
+    Assert.NotNull(result);
+    Assert.Equal("admin", result.accessRole);
+    Assert.Null(result.tokenAffiliateIds);
+    Assert.Null(result.tokenPlantIds);
+}
+
+[Fact]
+public void GetCaseHierarchyTokenAccessDetails_ShouldHandleMissingAuthHeader()
+{
+    // Arrange
+    var httpContext = new DefaultHttpContext();
+    httpContext.Request.Headers.Authorization = "";
+
+    _httpContextAccessor.Setup(x => x.HttpContext).Returns(httpContext);
+
+    var service = new ConfigServices(mockConfigRepository.Object, _jwtSettings.Object,_httpContextAccessor.Object);
+
+    // Act & Assert
+    Assert.ThrowsAny<Exception>(() => service.GetCaseHierarchyTokenAccessDetails());
+}
+
+/// <summary>
+/// Helper method to create Base64URL-safe strings compatible with JWTs.
+/// </summary>
+private static string Base64UrlEncode(byte[] input)
+{
+    return Convert.ToBase64String(input)
+        .TrimEnd('=')            
+        .Replace('+', '-')       
+        .Replace('/', '_');     
+}
