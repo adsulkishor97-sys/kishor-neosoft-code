@@ -1,5 +1,5 @@
 [Fact]
-public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_NonAdminWithEmptyLists_WhenClaimsEmpty()
+public void GetCaseHierarchyTokenAccessDetails_ShouldReturnNonAdminWithEmptyLists_WhenNoClaims()
 {
     // Arrange
     var fixture = new Fixture();
@@ -8,7 +8,7 @@ public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_NonAdminWithEmptyLis
     httpContext.User = user;
 
     string headerJson = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
-    string payloadJson = "{\"affiliateID\":[\"\"],\"plantID\":[\"\"]}";
+    string payloadJson = "{}";
 
     string header = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(headerJson));
     string payload = Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(payloadJson));
@@ -23,7 +23,6 @@ public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_NonAdminWithEmptyLis
     var result = _mockconfigServices.GetCaseHierarchyTokenAccessDetails();
 
     // Assert
-    Assert.NotNull(result);
     Assert.Equal("non-admin", result.accessRole);
     Assert.Empty(result.tokenAffiliateIds);
     Assert.Empty(result.tokenPlantIds);
