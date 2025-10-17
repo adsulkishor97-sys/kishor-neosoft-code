@@ -1,51 +1,37 @@
- public CaseHierarchyTokenAccessDetails GetCaseHierarchyTokenAccessDetails()
- {
-     var httpContext = _httpContextAccessor.HttpContext;
-     CryptographyHelper crypt = new(_jwtSettings);
-     var authHeader = httpContext?.Request.Headers.Authorization.FirstOrDefault();
-     var token = authHeader?["Bearer ".Length..];
+private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
+private readonly JwtSettings _jwtSettings;
+private readonly YourServiceClass _service;  // Replace with your actual service class name
 
-     var handler = new JwtSecurityTokenHandler();
-     var jwtToken = handler.ReadJwtToken(token);
+public YourServiceTests()
+{
+    _httpContextAccessorMock = new Mock<IHttpContextAccessor>();
+    _jwtSettings = new JwtSettings { SecretKey = "your-secret-key" }; // use dummy key for test
+    _service = new YourServiceClass(_httpContextAccessorMock.Object, _jwtSettings);
+}
 
-     var user = httpContext!.User;
+[Fact]
+public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUserIsAdmin()
+{
+    // Arrange
+    var fixture = new Fixture();
 
-     if (user.IsInRole(Constants.admin) || user.IsInRole(Constants.corporate))
-     {
-         return new CaseHierarchyTokenAccessDetails
-         {
-             accessRole = "admin",
-             tokenAffiliateIds=null,
-             tokenPlantIds=null
-         };
-     }
+    var httpContext = new DefaultHttpContext();
+    var user = new ClaimsPrincipal(new ClaimsIdentity(new[]
+    {
+        new Claim(ClaimTypes.Role, Constants.admin)
+    }, "mock"));
 
-     // get affiliates from Token
-     List<string> affiliateData = new();
-     var affiliateIDList = jwtToken.Claims.Where(x => x.Type == "affiliateID").Select(x => x.Value).ToList()!;
-     affiliateIDList.ForEach(x =>
-     {
-         if (!string.IsNullOrEmpty(x))
-         {
-             affiliateData.Add(crypt.AesGcmDecrypt(x));
-         }
-     });
+    httpContext.User = user;
+    httpContext.Request.Headers["Authorization"] = $"Bearer {fixture.Create<string>()}";
 
-     // get plants from Token
-     List<string> plantData = new();
-     var plantIDList = jwtToken.Claims.Where(x => x.Type == "plantID").Select(x => x.Value).ToList()!;
-     plantIDList.ForEach(x =>
-     {
-         if (!string.IsNullOrEmpty(x))
-         {
-             plantData.Add(crypt.AesGcmDecrypt(x));
-         }
-     });
+    _httpContextAccessorMock.Setup(x => x.HttpContext).Returns(httpContext);
 
-     return new CaseHierarchyTokenAccessDetails
-     {
-         accessRole = "non-admin",
-         tokenAffiliateIds = affiliateData,
-         tokenPlantIds = plantData
-     };
- }
+    // Act
+    var result = _service.GetCaseHierarchyTokenAccessDetails();
+
+    // Assert
+    Assert.NotNull(result);
+    Assert.Equal("admin", result.accessRole);
+    Assert.Null(result.tokenAffiliateIds);
+    Assert.Null(result.tokenPlantIds);
+}
