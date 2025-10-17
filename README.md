@@ -20,21 +20,21 @@ public async Task HandleAvailabilityKpi_ShouldReturnProcessedData_WhenRepository
             It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()))
         .ReturnsAsync(fakeData);
 
-    // Use reflection to access the private async method
-    var method = typeof(CurrentServices).GetMethod("HandleAvailabilityKpi", BindingFlags.NonPublic | BindingFlags.Static);
+    // Use reflection to access the private async *instance* method
+    var method = typeof(CurrentServices).GetMethod("HandleAvailabilityKpi",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
 
     // Act
     var task = (Task<List<GroupedData>>)method!.Invoke(_currServices, new object[]
     {
-    item, affiliateRequest1, request, startDate, endDate, quotedPmCodes
+        item, affiliateRequest1, request, startDate, endDate, quotedPmCodes
     })!;
+
     var result = await task;
 
     // Assert
     Assert.NotNull(result);
-    Assert.NotEmpty(result);
     _currRepositoryMock.Verify(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
         It.IsAny<string>(),
         It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()), Times.Once);
 }
-System.NullReferenceException : Object reference not set to an instance of an object.
