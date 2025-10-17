@@ -16,32 +16,44 @@ public async Task HandleAvailabilityKpi_ShouldReturnProcessedData_WhenRepository
 
     var fakeData = fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(3).ToList();
 
-    var mockRepo = new Mock<ICurrentRepository>();
-    mockRepo.Setup(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
+    // ✅ Mock repository
+    var repoMock = new Mock<ICurrentRepository>();
+    repoMock.Setup(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
         It.IsAny<string>(),
         It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()))
         .ReturnsAsync(fakeData);
 
-    // 🔹 Properly initialize your service with the mock repo
-    var currentServices = new CurrentServices(mockRepo.Object /*, other deps if required */);
+    // ✅ Mock or create service instance properly
+    var currentServices = new CurrentServices(repoMock.Object /* add other deps if needed */);
 
-    // Use reflection to get the private instance method
+    // ✅ Access private instance method
     var method = typeof(CurrentServices).GetMethod(
         "HandleAvailabilityKpi",
         BindingFlags.NonPublic | BindingFlags.Instance);
 
-    Assert.NotNull(method); // sanity check
+    Assert.NotNull(method);
 
-    // Act
-    var task = (Task<List<GroupedData>>)method!.Invoke(currentServices, new object[]
+    try
     {
-        item, affiliateRequest1, request, startDate, endDate, quotedPmCodes
-    })!;
-    var result = await task;
+        // ✅ Invoke method using reflection
+        var taskObj = method!.Invoke(currentServices, new object[]
+        {
+            item, affiliateRequest1, request, startDate, endDate, quotedPmCodes
+        });
 
-    // Assert
-    Assert.NotNull(result);
-    mockRepo.Verify(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
-        It.IsAny<string>(),
-        It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()), Times.Once);
+        // ✅ Await properly and catch real inner exceptions
+        var task = (Task<List<GroupedData>>)taskObj!;
+        var result = await task;
+
+        // ✅ Assertions
+        Assert.NotNull(result);
+        repoMock.Verify(r => r.ExecuteBigDataQuery_New<KpiNumeratorDenominatorAffiliateDistribution>(
+            It.IsAny<string>(),
+            It.IsAny<Func<DbDataReader, KpiNumeratorDenominatorAffiliateDistribution>>()), Times.Once);
+    }
+    catch (TargetInvocationException ex)
+    {
+        // 🔍 Unwrap actual cause to see what’s null
+        throw ex.InnerException ?? ex;
+    }
 }
