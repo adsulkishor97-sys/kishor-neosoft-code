@@ -1,13 +1,5 @@
-private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
-private readonly JwtSettings _jwtSettings;
-private readonly YourServiceClass _service;  // Replace with your actual service class name
-
-public YourServiceTests()
-{
-    _httpContextAccessorMock = new Mock<IHttpContextAccessor>();
-    _jwtSettings = new JwtSettings { SecretKey = "your-secret-key" }; // use dummy key for test
-    _service = new YourServiceClass(_httpContextAccessorMock.Object, _jwtSettings);
-}
+Microsoft.IdentityModel.Tokens.SecurityTokenMalformedException : IDX12709: CanReadToken() returned false. JWT is not well formed.
+The token needs to be in JWS or JWE Compact Serialization Format. (JWS): 'EncodedHeader.EncodedPayload.EncodedSignature'. (JWE): 'EncodedProtectedHeader.EncodedEncryptedKey.EncodedInitializationVector.EncodedCiphertext.EncodedAuthenticationTag'.
 
 [Fact]
 public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUserIsAdmin()
@@ -24,10 +16,10 @@ public void GetCaseHierarchyTokenAccessDetails_ShouldReturn_AdminAccess_WhenUser
     httpContext.User = user;
     httpContext.Request.Headers["Authorization"] = $"Bearer {fixture.Create<string>()}";
 
-    _httpContextAccessorMock.Setup(x => x.HttpContext).Returns(httpContext);
+    _httpContextAccessor.Setup(x => x.HttpContext).Returns(httpContext);
 
     // Act
-    var result = _service.GetCaseHierarchyTokenAccessDetails();
+    var result = _mockconfigServices.GetCaseHierarchyTokenAccessDetails();
 
     // Assert
     Assert.NotNull(result);
