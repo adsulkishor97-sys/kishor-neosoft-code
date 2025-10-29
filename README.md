@@ -1,55 +1,40 @@
-[Fact]
-public async Task GetSummariesAsync_ShouldReturnExpectedResults_UsingReflection()
-{
-    // Arrange
-    var fixture = new Fixture();
+ [TestMethod]
+ public async Task GetMonthlyAndQuarterlyAsync_PIPoint_NotNull_FindPIPoint()
+ {
+     var fixture = new Fixture();
+     var sapId = fixture.Create<int>();
+     var kpiCode = fixture.Create<int>();
+     var request = fixture.Build<AssetsPerformanceKpiTrendsRequest>()
+         .With(r => r.sapId, sapId)
+         .With(r => r.kpiCode, kpiCode)
+         .With(r => r.startTime, DateTime.Now.AddMonths(-2))
+         .With(r => r.endTime, DateTime.Now)
+         .Create();
 
-    // Create dependencies (mock PIPoint & others)
-    var piPointMock = new Mock<PIPoint>();
-    var afSummaryResult = new Dictionary<AFSummaryTypes, AFValue>
-    {
-        { AFSummaryTypes.Average, new AFValue(42.5) }
-    };
+     var fackserver = new List<PIServer>();
 
-    piPointMock.Setup(p => p.SummaryAsync(
-        It.IsAny<AFTimeRange>(),
-        AFSummaryTypes.Average,
-        AFCalculationBasis.TimeWeighted,
-        AFTimestampCalculation.Auto))
-        .ReturnsAsync(afSummaryResult);
+     var pitag = "AR.AR1.P-852A.Equipment_Offline_Status_AMH_CALC_OUTPUT";
+     PIServer server = (PIServer)FormatterServices.GetSafeUninitializedObject(typeof(PIServer));
 
-    var service = fixture.Create<AssetsPerformanceService>();
+     fackserver.Add(server);
+     _serverHelperMoke.Setup(x => x.ConnectedPIServers).Returns(fackserver);
 
-    // Set private dependencies via reflection if needed
-    typeof(AssetsPerformanceService)
-        .GetField("_pIPointWrapper", BindingFlags.NonPublic | BindingFlags.Instance)?
-        .SetValue(service, new Mock<IPIPointWrapper>().Object);
+     PIPoint fackpipoint = (PIPoint)FormatterServices.GetSafeUninitializedObject(typeof(PIPoint));
+     _pIPointWrapper.Setup(x => x.FindPIPoint(server, pitag)).Returns(fackpipoint);
 
-    // Use reflection to get private method info
-    var methodInfo = typeof(AssetsPerformanceService)
-        .GetMethod("GetSummariesAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+     AssetsService assetsService = new AssetsService(_assetsRepositoryMock.Object, _serverHelperMoke.Object, _pIPointWrapper.Object);
+     //private method 
+     var methodInfo = typeof(AssetsService).GetMethod("GetSummariesAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+     var task = (Task)methodInfo.Invoke(assetsService, new object[] { fackpipoint, request.startTime, request.endTime, "Month", 1 });
+     await task.ConfigureAwait(false);
+     var resultProp = task.GetType().GetProperty("Result");
+     var privatemethodResponse = resultProp?.GetValue(task);
+     Assert.IsNotNull(privatemethodResponse);
 
-    Assert.NotNull(methodInfo); // sanity check
-
-    // Prepare parameters
-    var piPoint = piPointMock.Object;
-    var stime = DateTime.Now.AddMonths(-3);
-    var etime = DateTime.Now;
-    string period = "month";
-    int stepMonths = 1;
-
-    // Invoke private async method via reflection
-    var task = (Task<IEnumerable<AssetsPerformanceKpiTrendsResponse>>)methodInfo.Invoke(
-        service,
-        new object[] { piPoint, stime, etime, period, stepMonths }
-    );
-
-    var result = await task;
-
-    // Assert
-    Assert.NotNull(result);
-    Assert.NotEmpty(result);
-    var first = result.First();
-    Assert.Equal("month", first.frequency);
-    Assert.Equal(piPointMock.Object.Name, first.tagName);
-}
+     //Act
+     var result = await _assetsService.GetMonthlyAndQuarterlyAsync(pitag, request.startTime, request.endTime);
+     //Assert
+     Assert.IsNotNull(result);
+ }
+ Test method AMH.AFSDK.UnitTests.ServiceTests.AssetServiceTest.GetMonthlyAndQuarterlyAsync_PIPoint_NotNull_FindPIPoint threw exception: 
+System.NullReferenceException: Object reference not set to an instance of an object.
