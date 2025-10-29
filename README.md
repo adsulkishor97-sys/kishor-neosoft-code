@@ -1,73 +1,55 @@
-public async Task<List<AssetsPerformanceKpiTrendsResponse>> GetMonthlyAndQuarterlyAsync(string piTag, DateTime stime, DateTime etime)
+[Fact]
+public async Task GetSummariesAsync_ShouldReturnExpectedResults_UsingReflection()
 {
-    var results = new List<AssetsPerformanceKpiTrendsResponse>();
+    // Arrange
+    var fixture = new Fixture();
 
-    foreach (var server in _serverHelper.ConnectedPIServers)
+    // Create dependencies (mock PIPoint & others)
+    var piPointMock = new Mock<PIPoint>();
+    var afSummaryResult = new Dictionary<AFSummaryTypes, AFValue>
     {
-        PIPoint piPoint = null;
-        try
-        {
-            piPoint = _pIPointWrapper.FindPIPoint(server, piTag);
-                
-        }
-        catch
-        {
-            continue;
-        }
-        if (piPoint != null)
-        {
-            results.AddRange(await GetSummariesAsync(piPoint, stime, etime, "month", 1));
-            results.AddRange(await GetSummariesAsync(piPoint, stime, etime, "quarter", 3));
-            break;
-        }
-    }
-    return results;
-}
-       
-private async Task<IEnumerable<AssetsPerformanceKpiTrendsResponse>> GetSummariesAsync(PIPoint piPoint, DateTime stime, DateTime etime, string period, int stepMonths)
-{
-    var summaries = new List<AssetsPerformanceKpiTrendsResponse>();
-    DateTime cursor = AlignToPeriodStart(stime, stepMonths);
+        { AFSummaryTypes.Average, new AFValue(42.5) }
+    };
 
-    while (cursor < etime)
-    {
-        DateTime periodStart = (cursor < stime) ? stime : cursor;
-        DateTime periodEnd = cursor.AddMonths(stepMonths);
-        if (periodEnd > etime) periodEnd = etime;
-        if (periodStart >= periodEnd) break;
+    piPointMock.Setup(p => p.SummaryAsync(
+        It.IsAny<AFTimeRange>(),
+        AFSummaryTypes.Average,
+        AFCalculationBasis.TimeWeighted,
+        AFTimestampCalculation.Auto))
+        .ReturnsAsync(afSummaryResult);
 
-        AFTimeRange afTimeRange = new AFTimeRange(periodStart, periodEnd);
+    var service = fixture.Create<AssetsPerformanceService>();
 
-        var summary = await piPoint.SummaryAsync(
-            afTimeRange,
-            AFSummaryTypes.Average,
-            AFCalculationBasis.TimeWeighted,
-            AFTimestampCalculation.Auto
-        );
+    // Set private dependencies via reflection if needed
+    typeof(AssetsPerformanceService)
+        .GetField("_pIPointWrapper", BindingFlags.NonPublic | BindingFlags.Instance)?
+        .SetValue(service, new Mock<IPIPointWrapper>().Object);
 
-        double? val = null;
-        try
-        {
+    // Use reflection to get private method info
+    var methodInfo = typeof(AssetsPerformanceService)
+        .GetMethod("GetSummariesAsync", BindingFlags.NonPublic | BindingFlags.Instance);
 
-            val = summary[AFSummaryTypes.Average].ValueAsDouble();
-        }
-        catch
-        {
-            // skip exception to set the value as null
-        }
-        long epoch = new DateTimeOffset(cursor).ToUnixTimeMilliseconds();
+    Assert.NotNull(methodInfo); // sanity check
 
-        summaries.Add(new AssetsPerformanceKpiTrendsResponse
-        {
-            tagName = piPoint.Name,
-            time = epoch.ToString(),
-            value = val,
-            frequency = period,
-            label = BuildLabel(cursor, stepMonths)
-        });
+    // Prepare parameters
+    var piPoint = piPointMock.Object;
+    var stime = DateTime.Now.AddMonths(-3);
+    var etime = DateTime.Now;
+    string period = "month";
+    int stepMonths = 1;
 
-        cursor = cursor.AddMonths(stepMonths);
-    }
+    // Invoke private async method via reflection
+    var task = (Task<IEnumerable<AssetsPerformanceKpiTrendsResponse>>)methodInfo.Invoke(
+        service,
+        new object[] { piPoint, stime, etime, period, stepMonths }
+    );
 
-    return summaries;
+    var result = await task;
+
+    // Assert
+    Assert.NotNull(result);
+    Assert.NotEmpty(result);
+    var first = result.First();
+    Assert.Equal("month", first.frequency);
+    Assert.Equal(piPointMock.Object.Name, first.tagName);
 }
