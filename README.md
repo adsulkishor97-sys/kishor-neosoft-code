@@ -1,99 +1,159 @@
-public async Task<List<AssetGroupedData>> GetAffDistFinalOverallNumAssetResult(List<KpiNumeratorDenominatorAffiliateDistribution> overAllNum, string category)
+using Xunit;
+using Moq;
+using AutoFixture;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+
+public class CurrentServicesTests
 {
-    dynamic finalResult;
-    var allplants = await _currentRepository.GetPlantLists();
+    private readonly Fixture _fixture;
+    private readonly Mock<ICurrentRepository> _currRepositoryMock;
+    private readonly CurrentServices _currServices;
 
-    var getaffiliatenamelist = (from r in overAllNum
-                                join plnt in allplants
-                                on r.plantid equals plnt.plantId
-                                select new
-                                {
-                                    r.kpiid,
-                                    plantname = plnt.plantName,
-                                    r.overallNumerator,
-                                    r.sap_id,
-                                    r.template,
-                                    r.tidnr,
-                                    r.pltxt,
-                                    r.plantid
-                                }
-                      ).ToList();
-    if (category == "U")
+    public CurrentServicesTests()
     {
-        finalResult = getaffiliatenamelist.GroupBy(x => new { x.kpiid, x.pltxt }).//sum up the multiple affiliate numerator and denominator and get the actual value.
-           Select(g => new KpiNumDenAffiliateDistributionResult
-
-           {
-               kpiid = g.Key.kpiid,
-               overallNum = g.Sum(x => x.overallNumerator),
-               plant = g.Select(x => x.plantid).FirstOrDefault(),
-               sapId = g.Select(x => x.sap_id).FirstOrDefault(),
-               template = g.Select(x => x.template).FirstOrDefault(),
-               tidnr = g.Select(x => x.tidnr).FirstOrDefault(),
-               pltxt = g.Select(x => x.pltxt).FirstOrDefault(),
-           }).OrderBy(x => x.kpiid).ThenBy(x => x.plantname).ToList();
-    }
-    else if (category == "AC")
-    {
-        finalResult = getaffiliatenamelist.GroupBy(x => new { x.kpiid, x.template }).//sum up the multiple affiliate numerator and denominator and get the actual value.
-           Select(g => new KpiNumDenAffiliateDistributionResult
-
-           {
-               kpiid = g.Key.kpiid,
-               overallNum = g.Sum(x => x.overallNumerator),
-               plant = g.Select(x => x.plantid).FirstOrDefault(),
-               sapId = g.Select(x => x.sap_id).FirstOrDefault(),
-               template = g.Select(x => x.template).FirstOrDefault(),
-               tidnr = g.Select(x => x.tidnr).FirstOrDefault(),
-               pltxt = g.Select(x => x.pltxt).FirstOrDefault(),
-           }).OrderBy(x => x.kpiid).ThenBy(x => x.plantname).ToList();
-    }
-    else
-    {
-        finalResult = getaffiliatenamelist.GroupBy(x => new { x.kpiid, x.tidnr }).//sum up the multiple affiliate numerator and denominator and get the actual value.
-           Select(g => new KpiNumDenAffiliateDistributionResult
-
-           {
-               kpiid = g.Key.kpiid,
-               overallNum = g.Sum(x => x.overallNumerator),
-               plant = g.Select(x => x.plantid).FirstOrDefault(),
-               sapId = g.Select(x => x.sap_id).FirstOrDefault(),
-               template = g.Select(x => x.template).FirstOrDefault(),
-               tidnr = g.Select(x => x.tidnr).FirstOrDefault(),
-               pltxt = g.Select(x => x.pltxt).FirstOrDefault(),
-           }).OrderBy(x => x.kpiid).ThenBy(x => x.plantname).ToList();
+        _fixture = new Fixture();
+        _currRepositoryMock = new Mock<ICurrentRepository>();
+        var mockConfig = new Mock<IConfiguration>();
+        _currServices = new CurrentServices(_currRepositoryMock.Object, mockConfig.Object);
     }
 
-    List<AssetGroupedData> lstResult = new List<AssetGroupedData>();
-    foreach (var item in finalResult)
-    {
-        AssetGroupedData assetDistResult = new AssetGroupedData();
-        assetDistResult.plantId = Convert.ToString(item.plant);
-        assetDistResult.overall = item.overallNum;
-        assetDistResult.sapId = item.sapId;
-        assetDistResult.template = item.template;
-        assetDistResult.tidnr = item.tidnr;
-        assetDistResult.pltxt = item.pltxt;
-        lstResult.Add(assetDistResult);
-    }
-    return lstResult;
-}
-    #region GetAffDistFinalOverallNumAssetResult
+    #region GetAffDistFinalOverallNumAssetResult Tests
+
     [Theory]
-    [ClassData(typeof(GetAffDistFinalOverallNumAssetResultGenerator))]
-    public async Task GetAffDistFinalOverallNumAssetResult_ShouldReturnData_WhenRepositoryReturnsData(List<KpiNumeratorDenominatorAffiliateDistribution> overAllNum, string category)
+    [InlineData("U")]
+    [InlineData("AC")]
+    [InlineData("Other")]
+    public async Task GetAffDistFinalOverallNumAssetResult_ShouldReturnExpectedGroupedData_ForAllCategories(string category)
     {
         // Arrange
-        var dbResponse = Enumerable.Range(0, 3).Select(index => Mock.Of<PlantList>())
+        var kpiId = _fixture.Create<int>();
+        var plantId = _fixture.Create<int>();
+        var plantName = _fixture.Create<string>();
+        var overallNumerator = _fixture.Create<decimal>();
+        var sapId = _fixture.Create<string>();
+        var template = _fixture.Create<string>();
+        var tidnr = _fixture.Create<string>();
+        var pltxt = _fixture.Create<string>();
 
-.ToList();
+        var overAllNum = new List<KpiNumeratorDenominatorAffiliateDistribution>
+        {
+            new KpiNumeratorDenominatorAffiliateDistribution
+            {
+                kpiid = kpiId,
+                plantid = plantId,
+                overallNumerator = overallNumerator,
+                sap_id = sapId,
+                template = template,
+                tidnr = tidnr,
+                pltxt = pltxt
+            },
+            // duplicate for grouping behavior
+            new KpiNumeratorDenominatorAffiliateDistribution
+            {
+                kpiid = kpiId,
+                plantid = plantId,
+                overallNumerator = overallNumerator,
+                sap_id = sapId,
+                template = template,
+                tidnr = tidnr,
+                pltxt = pltxt
+            }
+        };
 
-        _currRepositoryMock.Setup(repo => repo.GetPlantLists()).ReturnsAsync(dbResponse);
+        var plantList = new List<PlantList>
+        {
+            new PlantList
+            {
+                plantId = plantId,
+                plantName = plantName
+            }
+        };
 
+        _currRepositoryMock.Setup(r => r.GetPlantLists()).ReturnsAsync(plantList);
 
-        //Act
+        // Act
         var result = await _currServices.GetAffDistFinalOverallNumAssetResult(overAllNum, category);
+
         // Assert
         Assert.NotNull(result);
-        Assert.IsType<List<AssetGroupedData>>(result);
+        Assert.NotEmpty(result);
+
+        var first = result.First();
+
+        Assert.Equal(plantId.ToString(), first.plantId);
+        Assert.Equal(sapId, first.sapId);
+        Assert.Equal(template, first.template);
+        Assert.Equal(tidnr, first.tidnr);
+        Assert.Equal(pltxt, first.pltxt);
+
+        // grouping should sum the numerator
+        Assert.Equal(overallNumerator * 2, first.overall);
+
+        _currRepositoryMock.Verify(r => r.GetPlantLists(), Times.Once);
     }
+
+    [Fact]
+    public async Task GetAffDistFinalOverallNumAssetResult_ShouldReturnEmpty_WhenNoPlantMatch()
+    {
+        // Arrange
+        var overAllNum = _fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(2).ToList();
+
+        _currRepositoryMock.Setup(r => r.GetPlantLists())
+            .ReturnsAsync(new List<PlantList>()); // no matching plant
+
+        // Act
+        var result = await _currServices.GetAffDistFinalOverallNumAssetResult(overAllNum, "U");
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Empty(result);
+        _currRepositoryMock.Verify(r => r.GetPlantLists(), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetAffDistFinalOverallNumAssetResult_ShouldHandleNullTemplateTidnrPltxtGracefully()
+    {
+        // Arrange
+        var kpiId = _fixture.Create<int>();
+        var plantId = _fixture.Create<int>();
+        var overallNumerator = _fixture.Create<decimal>();
+        var plantName = _fixture.Create<string>();
+
+        var overAllNum = new List<KpiNumeratorDenominatorAffiliateDistribution>
+        {
+            new KpiNumeratorDenominatorAffiliateDistribution
+            {
+                kpiid = kpiId,
+                plantid = plantId,
+                overallNumerator = overallNumerator,
+                sap_id = null,
+                template = null,
+                tidnr = null,
+                pltxt = null
+            }
+        };
+
+        var plantList = new List<PlantList>
+        {
+            new PlantList { plantId = plantId, plantName = plantName }
+        };
+
+        _currRepositoryMock.Setup(r => r.GetPlantLists()).ReturnsAsync(plantList);
+
+        // Act
+        var result = await _currServices.GetAffDistFinalOverallNumAssetResult(overAllNum, "AC");
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Single(result);
+        Assert.Null(result.First().sapId);
+        Assert.Null(result.First().template);
+        Assert.Null(result.First().tidnr);
+        Assert.Null(result.First().pltxt);
+        _currRepositoryMock.Verify(r => r.GetPlantLists(), Times.Once);
+    }
+
+    #endregion
+}
