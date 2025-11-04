@@ -1,60 +1,59 @@
-using Xunit;
-using Moq;
-using AutoFixture;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-
-public class CurrentServicesTests
+public class KpiNumeratorDenominatorAffiliateDistribution
 {
-    private readonly Fixture _fixture;
-    private readonly Mock<ICurrentRepository> _mockRepository;
-    private readonly CurrentServices _service;
+    public int affiliates { get; set; }
+    public decimal overallNumerator { get; set; }
+    public decimal overallDenominator { get; set; }
+    public decimal criticalNumerator { get; set; }
+    public decimal criticalDenominator { get; set; }
+    public int kpiid { get; set; }
+    public decimal actual { get; set; }
+    public string? affiliatename { get; set; }
+    public int? plantid { get; set; }
+    public string? sap_id { get; set; }
+    public string? template { get; set; }
+    public string? tidnr { get; set; }
+    public string? pltxt { get; set; }
+}
+ public class GroupedData
+ {
+     public string? affiliateId { get; set; }
+     public string? name { get; set; }
+     public decimal overall { get; set; }
+     public decimal critical { get; set; }
+     public int overallState { get; set; } = 0;
+     public int criticalState { get; set; } = 0;
+     public long? overallTarget { get; set; } = null;
+     public string? plantId { get; set; }
+     public string? plantName { get; set; }
 
-    public CurrentServicesTests()
-    {
-        _fixture = new Fixture();
-        _mockRepository = new Mock<ICurrentRepository>();
+     public decimal? overallTargetMin { get; set; } = null;
 
-        // Initialize service with mocked dependencies
-        var mockConfiguration = new Mock<IConfiguration>();
-        _service = new CurrentServices(_mockRepository.Object, mockConfiguration.Object);
-    }
+     public decimal? overallTargetMax { get; set; } = null;
 
-    [Fact]
-    public async Task GetAffDistFinalOverallCriticalResult_ShouldReturnGroupedData_WhenValidInputsProvided()
-    {
-        // Arrange
-        var overAllCriticalResult = _fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(5).ToList();
+     public decimal? criticalTargetMin { get; set; }
+     public decimal? criticalTargetMax { get; set; }
+     public string? criticalTargetDisplay { get; set; } = null;
+     public decimal criticalTarget { get; set; }
 
-        // Create matching affiliates for join operation
-        var affiliates = overAllCriticalResult
-            .Select(x => _fixture.Build<Affiliate>()
-                                .With(a => a.affiliateCode, x.affiliates)
-                                .With(a => a.affiliateName, _fixture.Create<string>())
-                                .Create())
-            .ToList();
-
-        _mockRepository
-            .Setup(repo => repo.GetAffiliateLists())
-            .ReturnsAsync(affiliates);
-
-        // Act
-        var result = await _service.GetAffDistFinalOverallCriticalResult(overAllCriticalResult);
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.NotEmpty(result);
-        Assert.All(result, item =>
-        {
-            Assert.False(string.IsNullOrEmpty(item.affiliateId));
-            Assert.False(string.IsNullOrEmpty(item.name));
-            Assert.True(item.overall >= 0);
-            Assert.True(item.critical >= 0);
-        });
-
-        // Verify repository method called once
-        _mockRepository.Verify(repo => repo.GetAffiliateLists(), Times.Once);
-    }
+ }
+ public class KpiNumDenAffiliateDistributionResult
+{
+    public int kpiid { get; set; }
+    public int affiliates { get; set; }
+    public string? affiliatename { get; set; }
+    public int? plant { get; set; }
+    public string? plantname { get; set; }
+    public decimal overallNum { get; set; }
+    public decimal criticalNum { get; set; }
+    public decimal overallDen { get; set; }
+    public decimal criticalDen { get; set; }
+    public decimal overall { get; set; }
+    public decimal critical { get; set; }
+    public int overallState { get; set; } = 0;
+    public int criticalState { get; set; } = 0;
+    public long? overallTarget { get; set; } = null;
+    public string? sapId { get; set; }
+    public string? template { get; set; }
+    public string? tidnr { get; set; }
+    public string? pltxt { get; set; }
 }
