@@ -1,59 +1,81 @@
-public class KpiNumeratorDenominatorAffiliateDistribution
+using Xunit;
+using Moq;
+using AutoFixture;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+
+public class CurrentServicesTests
 {
-    public int affiliates { get; set; }
-    public decimal overallNumerator { get; set; }
-    public decimal overallDenominator { get; set; }
-    public decimal criticalNumerator { get; set; }
-    public decimal criticalDenominator { get; set; }
-    public int kpiid { get; set; }
-    public decimal actual { get; set; }
-    public string? affiliatename { get; set; }
-    public int? plantid { get; set; }
-    public string? sap_id { get; set; }
-    public string? template { get; set; }
-    public string? tidnr { get; set; }
-    public string? pltxt { get; set; }
-}
- public class GroupedData
- {
-     public string? affiliateId { get; set; }
-     public string? name { get; set; }
-     public decimal overall { get; set; }
-     public decimal critical { get; set; }
-     public int overallState { get; set; } = 0;
-     public int criticalState { get; set; } = 0;
-     public long? overallTarget { get; set; } = null;
-     public string? plantId { get; set; }
-     public string? plantName { get; set; }
+    private readonly Fixture _fixture;
+    private readonly Mock<ICurrentRepository> _mockRepository;
+    private readonly CurrentServices _service;
 
-     public decimal? overallTargetMin { get; set; } = null;
+    public CurrentServicesTests()
+    {
+        _fixture = new Fixture();
+        _mockRepository = new Mock<ICurrentRepository>();
+        var mockConfig = new Mock<IConfiguration>();
+        _service = new CurrentServices(_mockRepository.Object, mockConfig.Object);
+    }
 
-     public decimal? overallTargetMax { get; set; } = null;
+    [Fact]
+    public async Task GetAffDistFinalOverallCriticalResult_ShouldReturnExpectedGroupedData_WhenValidInput()
+    {
+        // Arrange
+        var kpiDataList = _fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(5).ToList();
 
-     public decimal? criticalTargetMin { get; set; }
-     public decimal? criticalTargetMax { get; set; }
-     public string? criticalTargetDisplay { get; set; } = null;
-     public decimal criticalTarget { get; set; }
+        // Ensure all affiliates have matching codes for join
+        var affiliateList = kpiDataList
+            .Select(k => new Affiliate
+            {
+                affiliateCode = k.affiliates,
+                affiliateName = _fixture.Create<string>()
+            })
+            .ToList();
 
- }
- public class KpiNumDenAffiliateDistributionResult
-{
-    public int kpiid { get; set; }
-    public int affiliates { get; set; }
-    public string? affiliatename { get; set; }
-    public int? plant { get; set; }
-    public string? plantname { get; set; }
-    public decimal overallNum { get; set; }
-    public decimal criticalNum { get; set; }
-    public decimal overallDen { get; set; }
-    public decimal criticalDen { get; set; }
-    public decimal overall { get; set; }
-    public decimal critical { get; set; }
-    public int overallState { get; set; } = 0;
-    public int criticalState { get; set; } = 0;
-    public long? overallTarget { get; set; } = null;
-    public string? sapId { get; set; }
-    public string? template { get; set; }
-    public string? tidnr { get; set; }
-    public string? pltxt { get; set; }
+        _mockRepository
+            .Setup(x => x.GetAffiliateLists())
+            .ReturnsAsync(affiliateList);
+
+        // Act
+        var result = await _service.GetAffDistFinalOverallCriticalResult(kpiDataList);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.NotEmpty(result);
+
+        foreach (var item in result)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(item.affiliateId));
+            Assert.False(string.IsNullOrWhiteSpace(item.name));
+            Assert.InRange(item.overall, decimal.MinValue, decimal.MaxValue);
+            Assert.InRange(item.critical, decimal.MinValue, decimal.MaxValue);
+        }
+
+        // Verify repository was called exactly once
+        _mockRepository.Verify(x => x.GetAffiliateLists(), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetAffDistFinalOverallCriticalResult_ShouldReturnEmptyList_WhenNoAffiliatesMatch()
+    {
+        // Arrange
+        var kpiDataList = _fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(5).ToList();
+        var emptyAffiliateList = new List<Affiliate>(); // no matches
+
+        _mockRepository
+            .Setup(x => x.GetAffiliateLists())
+            .ReturnsAsync(emptyAffiliateList);
+
+        // Act
+        var result = await _service.GetAffDistFinalOverallCriticalResult(kpiDataList);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Empty(result);
+
+        _mockRepository.Verify(x => x.GetAffiliateLists(), Times.Once);
+    }
 }
