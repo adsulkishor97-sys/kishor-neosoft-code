@@ -1,39 +1,18 @@
-using System;
-using System.Globalization;
-using System.Reflection;
-using AutoFixture;
-using Xunit;
-
-public class YourClassTests
+[Fact]
+public void GetParsedDate_ShouldReturnParsedDate_WhenInputIsValid()
 {
-    private readonly Fixture _fixture = new Fixture();
+    // Arrange
+    var inputDate = _fixture.Create<DateTime>().ToString(CultureInfo.InvariantCulture);
 
-    [Fact]
-    public void ParseAndFormatDates_ShouldReturnFormattedDates_WhenValidInput()
-    {
-        // Arrange
-        var startDate = _fixture.Create<DateTime>().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var endDate = _fixture.Create<DateTime>().AddDays(5).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    var method = typeof(CurrentServices)
+        .GetMethod("GetParsedDate", BindingFlags.NonPublic | BindingFlags.Static);
+    Assert.NotNull(method);
 
-        // Get method info using reflection
-        var methodInfo = typeof(YourClassName) // Replace with your actual class name
-            .GetMethod("ParseAndFormatDates", BindingFlags.NonPublic | BindingFlags.Static);
+    // Act
+    var result = method.Invoke(null, new object[] { inputDate });
 
-        Assert.NotNull(methodInfo);
-
-        // Act
-        var result = methodInfo.Invoke(null, new object[] { startDate, endDate });
-
-        // Assert
-        Assert.NotNull(result);
-
-        // Deconstruct the tuple
-        var (formattedStartDate, formattedEndDate, startDateTimeDate, endDateTimeDate)
-            = ((string, string, string, string))result!;
-
-        Assert.Equal(DateTime.Parse(startDate).ToString("yyyy-MM-dd"), formattedStartDate);
-        Assert.Equal(DateTime.Parse(endDate).ToString("yyyy-MM-dd"), formattedEndDate);
-        Assert.Equal(DateTime.Parse(startDate).ToString("yyyyMM"), startDateTimeDate);
-        Assert.Equal(DateTime.Parse(endDate).ToString("yyyyMM"), endDateTimeDate);
-    }
+    // Assert
+    Assert.NotNull(result);
+    Assert.IsType<DateTime>(result);
+    Assert.Equal(DateTime.Parse(inputDate, CultureInfo.InvariantCulture), (DateTime)result);
 }
