@@ -1,153 +1,184 @@
- public async Task<KpiPerformanceResponse> PerformanceSummaryPlantAsync(GetKpiPerformanceRequest request, string affiliateRequest)
- {
-     KpiPerformanceResponse kpiPerformanceResponse = new KpiPerformanceResponse();
+using Xunit;
+using Moq;
+using AutoFixture;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
 
-     try
-     {
-         var result = new KpiPerformanceResponse();
-         result.kpis = new List<KpiDetail>();
-         var allConvertedReport = new List<ConvertedKpiItemDetails>();
-         var allConvertedplantReports = new List<ConvertedKpiItemPlantDetails>();
-
-         KpiFormulaTargetRequest kpiFormulaTargetRequest = new KpiFormulaTargetRequest();
-         GetCaseHierarchyRequest getCaseHierarchy = new GetCaseHierarchyRequest();
-         getCaseHierarchy.affiliateIdList = request.affiliateId.ToString();
-
-         List<GetCaseHierarchyResponse> plantDetails = await _configRepository.GetCaseHierarchyAsync(getCaseHierarchy);
-
-         // get affiliate lists
-         var affiliatesRes = _currentRepository.GetAffiliateLists().Result.ToList();
-         var affiliateDataResult = _currentRepository.GetAffiliateLists().Result.Where(x => x.affiliateId == request.affiliateId).ToList();
-         string formatedAffiliateData = string.Join(",", affiliateDataResult.Select(x => $"'{x.affiliateCode}'").ToList());
-         kpiFormulaTargetRequest.performanceSummary = request.performanceSummary;
-
-         // get KPIs details like formula based on performanceSummary 
-         var kpisFormula = GetKpiFormulas(kpiFormulaTargetRequest);
-         // get actual values from BigData Queries based on startDate,endDate and affiliate
-         var actualData = GetPerformanceSummaryActualDataNew(request, affiliateRequest);
-         var actualPlantsData = GetPerformanceSummaryAffiliateActualData(request, formatedAffiliateData, plantDetails);
-
-         // iterate loop to get affiliate list with actual and target values
-         foreach (var kpi in kpisFormula)
-         {
-
-             var actualKpiname = kpi.name!.Replace(" ", "_");
-             var report = await GenerateMaintenanceKpiReport(kpi.name!, affiliatesRes, actualData[actualKpiname!], kpi.target);
-             var plantreport = await GenerateMaintenancePlantKpiReport(kpi.name!, plantDetails, actualPlantsData[actualKpiname!], kpi.target);
-             var convertedReport = await GenerateConvertedMaintenanceReport(kpi!, report);
-             var convertedPlantReport = await GenerateConvertedMaintenancePlantReport(kpi!, plantreport);
-
-
-             result.kpis!.Add(report);
-             result.kpis.ForEach(x =>
-             {
-                 x.plants ??= new List<Plant>();
-                 if (plantreport?.plants != null)
-                     x.plants.AddRange(plantreport.plants);
-             }
-             );
-
-             allConvertedReport.AddRange(convertedReport);
-             allConvertedplantReports.AddRange(convertedPlantReport);
-
-         }
-
-         // Calculate cost effectiveness
-         decimal min = 0m;
-         decimal max = 2m;
-
-         var avgPlantActualYs = allConvertedplantReports
-            .GroupBy(c => c.plant!)
-            .ToDictionary(g => g.Key, g => g.Sum(x => x.actualY));
-
-         var sumOfMaxAllAffiliates = allConvertedReport
-             .GroupBy(c => c.affiliate!)
-             .ToDictionary(g => g.Key, g => g.Sum(x => x.max));
-
-         max = sumOfMaxAllAffiliates.Select(a => a.Value).FirstOrDefault();
-
-         var costEffectivenessPlantList = avgPlantActualYs
-             .Select(kvp => new PerformanceSummaryPlantGroupItem(
-                 kvp.Key,
-                 kvp.Value,
-                 min,
-                 max,
-                 (kvp.Value / max) * 100m,
-                 100m))
-             .ToList();
-         string? PlantName = plantDetails!.Where(x => x.plantId == request.plantId).Select(x => x.plantName).FirstOrDefault();
-         result.performanceSummary = kpiFormulaTargetRequest.performanceSummary;
-         if (costEffectivenessPlantList.Count > 0)
-         {
-             result.average = Math.Round(costEffectivenessPlantList.Where(x => x.Plant == PlantName).Average(x => x.Percentage), 2);
-             result.bestPlant = Math.Round(costEffectivenessPlantList.OrderByDescending(c => c.Actual).FirstOrDefault()!.Percentage, 2);
-             result.bestPlantName = costEffectivenessPlantList.OrderByDescending(c => c.Actual).FirstOrDefault()!.Plant;
-             result.target = costEffectivenessPlantList.OrderByDescending(c => c.Target).FirstOrDefault()!.Target;
-         }
-         result.plants = null;
-         result.kpis.ForEach(x => x.affiliates = null);
-         result.affiliates = null;
-         result.kpis = null;
-
-         return result;
-     }
-     catch (Exception)
-     {
-         return kpiPerformanceResponse;
-     }
- }
- #region PerformanceSummaryPlantAsync
-[Theory]
-[ClassData(typeof(PerformanceSummaryPlantAsyncRequestGenerator))]
-public async Task PerformanceSummaryPlantAsync_ShouldReturnData_WhenRepositoryReturnsData(GetKpiPerformanceRequest request, GetCaseHierarchyRequest affiliateIdrequest, List<AffiliateList> affiliateList
-    , List<KpiFormulaTarget> dbFormulas, List<GetCaseHierarchyResponse> getCaseHierarchyResponses)
+public class PerformanceSummaryPlantAsyncTests
 {
-    // Arrange  
+    private readonly IFixture _fixture;
+    private readonly Mock<ICurrentRepository> _currRepositoryMock;
+    private readonly Mock<IConfigRepository> _configRepositoryMock;
+    private readonly Mock<IPerformanceSummaryRepository> _performanceSumRepositoryMock;
+    private readonly PerformanceSummaryServices _performanceSummServices;
 
-    _currRepositoryMock.Setup(repo => repo.GetAffiliateLists()).ReturnsAsync(affiliateList);
-    _configRepositoryMock.Setup(repo => repo.GetCaseHierarchyAsync(It.IsAny<GetCaseHierarchyRequest>())).ReturnsAsync(getCaseHierarchyResponses);
+    public PerformanceSummaryPlantAsyncTests()
+    {
+        _fixture = new Fixture();
+        _currRepositoryMock = new Mock<ICurrentRepository>();
+        _configRepositoryMock = new Mock<IConfigRepository>();
+        _performanceSumRepositoryMock = new Mock<IPerformanceSummaryRepository>();
 
-    _performanceSumRepositoryMock.Setup(repo => repo.GetKpiFormulaTarget(It.IsAny<KpiFormulaTargetRequest>())).Returns(Task.FromResult(dbFormulas));
-    //Act
-    var result = await _performanceSummServices.PerformanceSummaryPlantAsync(request, affiliateIdrequest.affiliateIdList!);
-    // Assert
-    Assert.NotNull(result);
-    Assert.IsType<KpiPerformanceResponse>(result);
-}
+        var mockConfig = new Mock<IConfiguration>();
 
-#endregion
-[Fact]
-public async Task PerformanceSummaryPlantAsync_ShouldReturnValidResponse_WhenDependenciesReturnData()
-{
-    // Arrange
-    var request = _fixture.Build<GetKpiPerformanceRequest>()
-                          .With(x => x.affiliateId, _fixture.Create<int>())
-                          .With(x => x.performanceSummary, _fixture.Create<string>())
-                          .With(x => x.plantId, _fixture.Create<int>())
-                          .Create();
+        _performanceSummServices = new PerformanceSummaryServices(
+            _currRepositoryMock.Object,
+            _configRepositoryMock.Object,
+            _performanceSumRepositoryMock.Object,
+            mockConfig.Object
+        );
+    }
 
-    var affiliateList = _fixture.CreateMany<AffiliateList>(3).ToList();
-    var getCaseHierarchyResponses = _fixture.CreateMany<GetCaseHierarchyResponse>(3).ToList();
+    // ✅ 1. Main Happy Path — Covers all loops, groups, and calculations
+    [Fact]
+    public async Task PerformanceSummaryPlantAsync_ShouldReturnExpectedResult_WhenDependenciesReturnValidData()
+    {
+        // Arrange
+        var request = _fixture.Build<GetKpiPerformanceRequest>()
+                              .With(x => x.affiliateId, _fixture.Create<int>())
+                              .With(x => x.plantId, _fixture.Create<int>())
+                              .With(x => x.performanceSummary, _fixture.Create<string>())
+                              .Create();
 
-    var kpiFormulaTarget = _fixture.Build<KpiFormulaTarget>()
-                                   .With(x => x.kpi, _fixture.Create<string>())
-                                   .With(x => x.target, _fixture.Create<int>())
-                                   .CreateMany(2).ToList();
+        var affiliateList = _fixture.Build<AffiliateList>()
+                                    .With(a => a.affiliateId, request.affiliateId)
+                                    .CreateMany(3).ToList();
 
-    _currRepositoryMock.Setup(x => x.GetAffiliateLists()).ReturnsAsync(affiliateList);
-    _configRepositoryMock.Setup(x => x.GetCaseHierarchyAsync(It.IsAny<GetCaseHierarchyRequest>()))
-                         .ReturnsAsync(getCaseHierarchyResponses);
-    _performanceSumRepositoryMock.Setup(x => x.GetKpiFormulaTarget(It.IsAny<KpiFormulaTargetRequest>()))
-                                     .ReturnsAsync(kpiFormulaTarget);
+        var getCaseHierarchyResponses = _fixture.Build<GetCaseHierarchyResponse>()
+                                                .With(x => x.plantId, request.plantId)
+                                                .With(x => x.plantName, _fixture.Create<string>())
+                                                .CreateMany(3).ToList();
 
-    // Act
-    var result = await _performanceSummServices.PerformanceSummaryPlantAsync(request, _fixture.Create<string>());
+        var kpiFormulaTargets = _fixture.Build<KpiFormulaTarget>()
+                                        .With(x => x.kpi, _fixture.Create<string>())
+                                        .With(x => x.name, _fixture.Create<string>())
+                                        .With(x => x.target, _fixture.Create<decimal>())
+                                        .CreateMany(2).ToList();
 
-    // Assert
-    Assert.NotNull(result);
-    Assert.IsType<KpiPerformanceResponse>(result);
-    Assert.True(result.bestPlantName == null);
-    Assert.True(result.bestPlant >= 0);
-    Assert.True(result.average >= 0);
-    Assert.True(result.target >= 0);
+        // Mock repository methods
+        _currRepositoryMock.Setup(r => r.GetAffiliateLists()).ReturnsAsync(affiliateList);
+        _configRepositoryMock.Setup(r => r.GetCaseHierarchyAsync(It.IsAny<GetCaseHierarchyRequest>()))
+                             .ReturnsAsync(getCaseHierarchyResponses);
+
+        // Mock kpi formula data
+        _performanceSumRepositoryMock.Setup(r => r.GetKpiFormulaTarget(It.IsAny<KpiFormulaTargetRequest>()))
+                                     .ReturnsAsync(kpiFormulaTargets);
+
+        // Mock internal helper methods inside service (to isolate DB logic)
+        var serviceMock = new Mock<PerformanceSummaryServices>(
+            _currRepositoryMock.Object,
+            _configRepositoryMock.Object,
+            _performanceSumRepositoryMock.Object,
+            new Mock<IConfiguration>().Object
+        ) { CallBase = true };
+
+        // mock data for internal processing
+        var kpiName = kpiFormulaTargets.First().name!.Replace(" ", "_");
+        var fakeActualData = new Dictionary<string, List<KpiDetail>>
+        {
+            { kpiName, _fixture.CreateMany<KpiDetail>(2).ToList() }
+        };
+        var fakeActualPlantsData = new Dictionary<string, List<KpiDetail>>
+        {
+            { kpiName, _fixture.CreateMany<KpiDetail>(2).ToList() }
+        };
+
+        serviceMock.Setup(s => s.GetKpiFormulas(It.IsAny<KpiFormulaTargetRequest>()))
+                   .Returns(kpiFormulaTargets);
+
+        serviceMock.Setup(s => s.GetPerformanceSummaryActualDataNew(It.IsAny<GetKpiPerformanceRequest>(), It.IsAny<string>()))
+                   .Returns(fakeActualData);
+
+        serviceMock.Setup(s => s.GetPerformanceSummaryAffiliateActualData(It.IsAny<GetKpiPerformanceRequest>(), It.IsAny<string>(), It.IsAny<List<GetCaseHierarchyResponse>>()))
+                   .Returns(fakeActualPlantsData);
+
+        serviceMock.Setup(s => s.GenerateMaintenanceKpiReport(It.IsAny<string>(), It.IsAny<List<AffiliateList>>(), It.IsAny<List<KpiDetail>>(), It.IsAny<decimal>()))
+                   .ReturnsAsync(_fixture.Create<KpiDetail>());
+        serviceMock.Setup(s => s.GenerateMaintenancePlantKpiReport(It.IsAny<string>(), It.IsAny<List<GetCaseHierarchyResponse>>(), It.IsAny<List<KpiDetail>>(), It.IsAny<decimal>()))
+                   .ReturnsAsync(_fixture.Create<KpiDetail>());
+        serviceMock.Setup(s => s.GenerateConvertedMaintenanceReport(It.IsAny<KpiFormulaTarget>(), It.IsAny<KpiDetail>()))
+                   .ReturnsAsync(_fixture.CreateMany<ConvertedKpiItemDetails>(3).ToList());
+        serviceMock.Setup(s => s.GenerateConvertedMaintenancePlantReport(It.IsAny<KpiFormulaTarget>(), It.IsAny<KpiDetail>()))
+                   .ReturnsAsync(_fixture.CreateMany<ConvertedKpiItemPlantDetails>(3).ToList());
+
+        // Act
+        var result = await serviceMock.Object.PerformanceSummaryPlantAsync(request, _fixture.Create<string>());
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.IsType<KpiPerformanceResponse>(result);
+        Assert.True(result.average >= 0);
+        Assert.True(result.bestPlant >= 0);
+        Assert.NotNull(result.performanceSummary);
+        Assert.True(result.target >= 0);
+    }
+
+    // ✅ 2. Empty costEffectivenessPlantList — test "if (Count > 0)" false branch
+    [Fact]
+    public async Task PerformanceSummaryPlantAsync_ShouldHandleEmptyCostEffectivenessList()
+    {
+        // Arrange
+        var request = _fixture.Build<GetKpiPerformanceRequest>()
+                              .With(x => x.affiliateId, _fixture.Create<int>())
+                              .With(x => x.performanceSummary, _fixture.Create<string>())
+                              .With(x => x.plantId, _fixture.Create<int>())
+                              .Create();
+
+        _currRepositoryMock.Setup(r => r.GetAffiliateLists()).ReturnsAsync(new List<AffiliateList>());
+        _configRepositoryMock.Setup(r => r.GetCaseHierarchyAsync(It.IsAny<GetCaseHierarchyRequest>()))
+                             .ReturnsAsync(new List<GetCaseHierarchyResponse>());
+
+        var serviceMock = new Mock<PerformanceSummaryServices>(
+            _currRepositoryMock.Object,
+            _configRepositoryMock.Object,
+            _performanceSumRepositoryMock.Object,
+            new Mock<IConfiguration>().Object
+        ) { CallBase = true };
+
+        // Force empty allConvertedplantReports & allConvertedReport
+        serviceMock.Setup(s => s.GetKpiFormulas(It.IsAny<KpiFormulaTargetRequest>()))
+                   .Returns(new List<KpiFormulaTarget>());
+        serviceMock.Setup(s => s.GetPerformanceSummaryActualDataNew(It.IsAny<GetKpiPerformanceRequest>(), It.IsAny<string>()))
+                   .Returns(new Dictionary<string, List<KpiDetail>>());
+        serviceMock.Setup(s => s.GetPerformanceSummaryAffiliateActualData(It.IsAny<GetKpiPerformanceRequest>(), It.IsAny<string>(), It.IsAny<List<GetCaseHierarchyResponse>>()))
+                   .Returns(new Dictionary<string, List<KpiDetail>>());
+
+        // Act
+        var result = await serviceMock.Object.PerformanceSummaryPlantAsync(request, _fixture.Create<string>());
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Null(result.bestPlantName);
+        Assert.Equal(0, result.bestPlant);
+        Assert.Equal(0, result.average);
+        Assert.Equal(0, result.target);
+    }
+
+    // ✅ 3. Exception Handling Path — covers catch block
+    [Fact]
+    public async Task PerformanceSummaryPlantAsync_ShouldReturnDefaultResponse_WhenExceptionThrown()
+    {
+        // Arrange
+        var request = _fixture.Create<GetKpiPerformanceRequest>();
+        var serviceMock = new Mock<PerformanceSummaryServices>(
+            _currRepositoryMock.Object,
+            _configRepositoryMock.Object,
+            _performanceSumRepositoryMock.Object,
+            new Mock<IConfiguration>().Object
+        ) { CallBase = true };
+
+        // Simulate repository throwing exception
+        _currRepositoryMock.Setup(r => r.GetAffiliateLists()).ThrowsAsync(new Exception("DB Failure"));
+
+        // Act
+        var result = await serviceMock.Object.PerformanceSummaryPlantAsync(request, _fixture.Create<string>());
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.IsType<KpiPerformanceResponse>(result);
+        Assert.Null(result.kpis); // Default empty
+    }
 }
