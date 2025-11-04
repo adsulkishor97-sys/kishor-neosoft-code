@@ -1,41 +1,39 @@
- [Fact]
-    public async Task HandleAffiliateDistributionGlobalPageRequest_ShouldReturnExpectedResult_WhenValidInput()
+public async Task<List<GroupedData>> GetAffDistFinalOverallCriticalResult(List<KpiNumeratorDenominatorAffiliateDistribution> overAllCriticalResult)
+{
+    var allaffiliates = await _currentRepository.GetAffiliateLists();
+
+    var getaffiliatenamelist = (from r in overAllCriticalResult
+                                join aff in allaffiliates
+                                on r.affiliates equals aff.affiliateCode
+                                select new
+                                {
+                                    r.kpiid,
+                                    affiliatename = aff.affiliateName,
+                                    r.overallNumerator,
+                                    r.criticalNumerator,
+                                    r.affiliates
+                                }
+                      ).ToList();
+    var finalResult = getaffiliatenamelist.GroupBy(x => new { x.kpiid, x.affiliatename }).//sum up the multiple affiliate numerator and denominator and get the actual value.
+       Select(g => new KpiNumDenAffiliateDistributionResult
+
+       {
+           kpiid = g.Key.kpiid,
+           affiliatename = g.Key.affiliatename,
+           overallNum = g.Average(x => x.overallNumerator),
+           criticalNum = g.Average(x => x.criticalNumerator),
+           affiliates = g.Select(x => x.affiliates).FirstOrDefault()
+       }).OrderBy(x => x.kpiid).ThenBy(x => x.affiliatename).ToList();
+
+    List<GroupedData> lstResult = new List<GroupedData>();
+    foreach (var item in finalResult)
     {
-        // Arrange
-        var request = _fixture.Build<GetAffiliatePlantDistributionRequest>()
-                              .With(x => x.kpiCode, _fixture.Create<string>())
-                              .Create();
-
-        var affiliateRequest = _fixture.Create<string>();
-        var formattedStartDate = _fixture.Create<string>();
-        var formattedEndDate = _fixture.Create<string>();
-        var quotedPmCodes = _fixture.Create<string>();
-
-        var service = new CurrentServices(
-            _mockCurrentRepository.Object,
-            _mockConfiguration.Object
-        );
-
-        // --- Access the private method via reflection ---
-        var methodInfo = typeof(CurrentServices).GetMethod(
-            "HandleAffiliateDistributionGlobalPageRequest",
-            BindingFlags.NonPublic | BindingFlags.Instance);
-
-        Assert.NotNull(methodInfo);
-
-        // --- Act ---
-        var resultTask = (Task<List<GroupedData>>)methodInfo.Invoke(service, new object[]
-        {
-            request,
-            affiliateRequest,
-            formattedStartDate,
-            formattedEndDate,
-            quotedPmCodes
-        });
-
-        var result = await resultTask;
-
-        // --- Assert ---
-        Assert.NotNull(result);
-        Assert.IsType<List<GroupedData>>(result);
+        GroupedData affDistResult = new GroupedData();
+        affDistResult.affiliateId = Convert.ToString(item.affiliates);
+        affDistResult.name = item.affiliatename;
+        affDistResult.overall = item.overallNum;
+        affDistResult.critical = item.criticalNum;
+        lstResult.Add(affDistResult);
     }
+    return lstResult;
+}
