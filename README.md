@@ -79,3 +79,24 @@ public class CurrentServicesTests
         _mockRepository.Verify(x => x.GetAffiliateLists(), Times.Once);
     }
 }
+    #region GetAffDistFinalOverallCriticalResult
+    [Theory]
+    [ClassData(typeof(GetAffDistFinalOverallCriticalResultGenerator))]
+    public async Task GetAffDistFinalOverallCriticalResult_ShouldReturnData_WhenRepositoryReturnsData(List<KpiNumeratorDenominatorAffiliateDistribution> request)
+    {
+        // Arrange
+        var dbResponse = Enumerable.Range(0, 3).Select(index => Mock.Of<AffiliateList>())
+
+.ToList();
+
+        _currRepositoryMock.Setup(repo => repo.GetAffiliateLists()).ReturnsAsync(dbResponse);
+
+
+        //Act
+        var result = await _currServices.GetAffDistFinalOverallCriticalResult(request);
+        // Assert
+        Assert.NotNull(result);
+        Assert.IsType<List<GroupedData>>(result);
+    }
+
+    #endregion
