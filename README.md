@@ -1,97 +1,50 @@
-#region GetAffDistFinalOverallCriticalResult
-
-using Xunit;
-using Moq;
-using AutoFixture;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-
-public class CurrentServicesTests
+public async Task<List<GroupedData>> GetAffDistFinalOverallNumDenPlantResult(List<KpiNumeratorDenominatorAffiliateDistribution> overAllNum, List<KpiNumeratorDenominatorAffiliateDistribution> overAllDen)
 {
-    private readonly Fixture _fixture;
-    private readonly Mock<ICurrentRepository> _currRepositoryMock;
-    private readonly CurrentServices _currServices;
+    var result = (from onum in overAllNum
+                  join oden in overAllDen
+                  on new { onum.kpiid, onum.plantid }
+                  equals new { oden.kpiid, oden.plantid }
+                  select new KpiNumDenAffiliateDistributionResult
+                  {
+                      kpiid = onum.kpiid,
+                      plant = onum.plantid,
+                      overallNum = onum.overallNumerator,
+                      overallDen = oden.overallDenominator,
+                  }).ToList();
+    var allplants = await _currentRepository.GetPlantLists();
 
-    public CurrentServicesTests()
+    var getaffiliatenamelist = (from r in result
+                                join plnt in allplants
+                                on r.plant equals plnt.plantId
+                                select new
+                                {
+                                    r.kpiid,
+                                    plantname = plnt.plantName,
+                                    r.overallNum,
+                                    r.overallDen,
+                                    r.plant
+                                }
+                      ).ToList();
+    var finalResult = getaffiliatenamelist.GroupBy(x => new { x.kpiid, x.plantname }).//sum up the multiple affiliate numerator and denominator and get the actual value.
+       Select(g => new KpiNumDenAffiliateDistributionResult
+
+       {
+           kpiid = g.Key.kpiid,
+           plantname = g.Key.plantname.ToString(),
+           overallNum = g.Sum(x => x.overallNum),
+           criticalNum = g.Sum(x => x.overallDen),
+           plant = g.Select(x => x.plant).FirstOrDefault()
+       }).OrderBy(x => x.kpiid).ThenBy(x => x.plantname).ToList();
+
+    List<GroupedData> lstResult = new List<GroupedData>();
+    foreach (var item in finalResult)
     {
-        _fixture = new Fixture();
-        _currRepositoryMock = new Mock<ICurrentRepository>();
-        var mockConfig = new Mock<IConfiguration>();
-        _currServices = new CurrentServices(_currRepositoryMock.Object, mockConfig.Object);
+        GroupedData affDistResult = new GroupedData();
+        affDistResult.plantId = Convert.ToString(item.plant);
+        affDistResult.plantName = item.plantname;
+        affDistResult.overall = item.overallDen != 0 ? ((item.overallNum / item.overallDen) * 100) : item.overallNum;
+        affDistResult.critical = item.criticalDen != 0 ? ((item.criticalNum / item.criticalDen) * 100) : item.criticalNum;
+        lstResult.Add(affDistResult);
     }
-
-    [Theory]
-    [ClassData(typeof(GetAffDistFinalOverallCriticalResultGenerator))]
-    public async Task GetAffDistFinalOverallCriticalResult_ShouldReturnExpectedGroupedData_WhenValidInput(
-        List<KpiNumeratorDenominatorAffiliateDistribution> request)
-    {
-        // Arrange
-        var affiliates = request
-            .Select(r => new AffiliateList
-            {
-                affiliateCode = r.affiliates,
-                affiliateName = _fixture.Create<string>()
-            })
-            .ToList();
-
-        _currRepositoryMock
-            .Setup(repo => repo.GetAffiliateLists())
-            .ReturnsAsync(affiliates);
-
-        // Act
-        var result = await _currServices.GetAffDistFinalOverallCriticalResult(request);
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.NotEmpty(result);
-        Assert.All(result, item =>
-        {
-            Assert.False(string.IsNullOrEmpty(item.affiliateId));
-            Assert.False(string.IsNullOrEmpty(item.name));
-            Assert.InRange(item.overall, decimal.MinValue, decimal.MaxValue);
-            Assert.InRange(item.critical, decimal.MinValue, decimal.MaxValue);
-        });
-
-        _currRepositoryMock.Verify(repo => repo.GetAffiliateLists(), Times.Once);
-    }
-
-    [Fact]
-    public async Task GetAffDistFinalOverallCriticalResult_ShouldReturnEmptyList_WhenNoAffiliatesMatch()
-    {
-        // Arrange
-        var request = _fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(5).ToList();
-
-        _currRepositoryMock
-            .Setup(repo => repo.GetAffiliateLists())
-            .ReturnsAsync(new List<AffiliateList>()); // No affiliates
-
-        // Act
-        var result = await _currServices.GetAffDistFinalOverallCriticalResult(request);
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Empty(result);
-        _currRepositoryMock.Verify(repo => repo.GetAffiliateLists(), Times.Once);
-    }
+    return lstResult;
 }
-
-#endregion
-
-#region Data Generator
-
-public class GetAffDistFinalOverallCriticalResultGenerator : TheoryData<List<KpiNumeratorDenominatorAffiliateDistribution>>
-{
-    public GetAffDistFinalOverallCriticalResultGenerator()
-    {
-        var fixture = new Fixture();
-        var requestData = fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(5).ToList();
-
-        // Ensure some duplicate affiliate IDs for grouping logic coverage
-        requestData[0].affiliates = requestData[1].affiliates;
-
-        Add(requestData);
-    }
-}
-
-#endregion
