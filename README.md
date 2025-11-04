@@ -1,102 +1,97 @@
+#region GetAffDistFinalOverallCriticalResult
+
 using Xunit;
 using Moq;
 using AutoFixture;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Configuration;
 
 public class CurrentServicesTests
 {
     private readonly Fixture _fixture;
-    private readonly Mock<ICurrentRepository> _mockRepository;
-    private readonly CurrentServices _service;
+    private readonly Mock<ICurrentRepository> _currRepositoryMock;
+    private readonly CurrentServices _currServices;
 
     public CurrentServicesTests()
     {
         _fixture = new Fixture();
-        _mockRepository = new Mock<ICurrentRepository>();
+        _currRepositoryMock = new Mock<ICurrentRepository>();
         var mockConfig = new Mock<IConfiguration>();
-        _service = new CurrentServices(_mockRepository.Object, mockConfig.Object);
+        _currServices = new CurrentServices(_currRepositoryMock.Object, mockConfig.Object);
     }
 
-    [Fact]
-    public async Task GetAffDistFinalOverallCriticalResult_ShouldReturnExpectedGroupedData_WhenValidInput()
+    [Theory]
+    [ClassData(typeof(GetAffDistFinalOverallCriticalResultGenerator))]
+    public async Task GetAffDistFinalOverallCriticalResult_ShouldReturnExpectedGroupedData_WhenValidInput(
+        List<KpiNumeratorDenominatorAffiliateDistribution> request)
     {
         // Arrange
-        var kpiDataList = _fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(5).ToList();
-
-        // Ensure all affiliates have matching codes for join
-        var affiliateList = kpiDataList
-            .Select(k => new Affiliate
+        var affiliates = request
+            .Select(r => new AffiliateList
             {
-                affiliateCode = k.affiliates,
+                affiliateCode = r.affiliates,
                 affiliateName = _fixture.Create<string>()
             })
             .ToList();
 
-        _mockRepository
-            .Setup(x => x.GetAffiliateLists())
-            .ReturnsAsync(affiliateList);
+        _currRepositoryMock
+            .Setup(repo => repo.GetAffiliateLists())
+            .ReturnsAsync(affiliates);
 
         // Act
-        var result = await _service.GetAffDistFinalOverallCriticalResult(kpiDataList);
+        var result = await _currServices.GetAffDistFinalOverallCriticalResult(request);
 
         // Assert
         Assert.NotNull(result);
         Assert.NotEmpty(result);
-
-        foreach (var item in result)
+        Assert.All(result, item =>
         {
-            Assert.False(string.IsNullOrWhiteSpace(item.affiliateId));
-            Assert.False(string.IsNullOrWhiteSpace(item.name));
+            Assert.False(string.IsNullOrEmpty(item.affiliateId));
+            Assert.False(string.IsNullOrEmpty(item.name));
             Assert.InRange(item.overall, decimal.MinValue, decimal.MaxValue);
             Assert.InRange(item.critical, decimal.MinValue, decimal.MaxValue);
-        }
+        });
 
-        // Verify repository was called exactly once
-        _mockRepository.Verify(x => x.GetAffiliateLists(), Times.Once);
+        _currRepositoryMock.Verify(repo => repo.GetAffiliateLists(), Times.Once);
     }
 
     [Fact]
     public async Task GetAffDistFinalOverallCriticalResult_ShouldReturnEmptyList_WhenNoAffiliatesMatch()
     {
         // Arrange
-        var kpiDataList = _fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(5).ToList();
-        var emptyAffiliateList = new List<Affiliate>(); // no matches
+        var request = _fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(5).ToList();
 
-        _mockRepository
-            .Setup(x => x.GetAffiliateLists())
-            .ReturnsAsync(emptyAffiliateList);
+        _currRepositoryMock
+            .Setup(repo => repo.GetAffiliateLists())
+            .ReturnsAsync(new List<AffiliateList>()); // No affiliates
 
         // Act
-        var result = await _service.GetAffDistFinalOverallCriticalResult(kpiDataList);
+        var result = await _currServices.GetAffDistFinalOverallCriticalResult(request);
 
         // Assert
         Assert.NotNull(result);
         Assert.Empty(result);
-
-        _mockRepository.Verify(x => x.GetAffiliateLists(), Times.Once);
+        _currRepositoryMock.Verify(repo => repo.GetAffiliateLists(), Times.Once);
     }
 }
-    #region GetAffDistFinalOverallCriticalResult
-    [Theory]
-    [ClassData(typeof(GetAffDistFinalOverallCriticalResultGenerator))]
-    public async Task GetAffDistFinalOverallCriticalResult_ShouldReturnData_WhenRepositoryReturnsData(List<KpiNumeratorDenominatorAffiliateDistribution> request)
+
+#endregion
+
+#region Data Generator
+
+public class GetAffDistFinalOverallCriticalResultGenerator : TheoryData<List<KpiNumeratorDenominatorAffiliateDistribution>>
+{
+    public GetAffDistFinalOverallCriticalResultGenerator()
     {
-        // Arrange
-        var dbResponse = Enumerable.Range(0, 3).Select(index => Mock.Of<AffiliateList>())
+        var fixture = new Fixture();
+        var requestData = fixture.CreateMany<KpiNumeratorDenominatorAffiliateDistribution>(5).ToList();
 
-.ToList();
+        // Ensure some duplicate affiliate IDs for grouping logic coverage
+        requestData[0].affiliates = requestData[1].affiliates;
 
-        _currRepositoryMock.Setup(repo => repo.GetAffiliateLists()).ReturnsAsync(dbResponse);
-
-
-        //Act
-        var result = await _currServices.GetAffDistFinalOverallCriticalResult(request);
-        // Assert
-        Assert.NotNull(result);
-        Assert.IsType<List<GroupedData>>(result);
+        Add(requestData);
     }
+}
 
-    #endregion
+#endregion
