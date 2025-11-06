@@ -56,3 +56,12 @@ public class LoadTestBothRequest
     public string? StartDate { get; set; }
     public string? EndDate { get; set; }
 }
+{
+  "NoOfRequests": 5,
+  "Page": "1",
+  "AffiliateId": "AFF123",
+  "KpiCode": "KPI001",
+  "StartDate": "2025-01-01",
+  "EndDate": "2025-10-01"
+}
+
