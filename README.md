@@ -1,4 +1,3 @@
-[HttpPost("LoadTestBoth")]
 public async Task<IActionResult> LoadTestBoth([FromBody] LoadTestBothRequest request)
 {
     if (request == null || request.NoOfRequests <= 0)
@@ -6,12 +5,11 @@ public async Task<IActionResult> LoadTestBoth([FromBody] LoadTestBothRequest req
 
     var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-    // Run both APIs in parallel for N requests
     var tasks = new List<Task>();
 
     for (int i = 0; i < request.NoOfRequests; i++)
     {
-        // Run Affiliate Criteria
+        
         tasks.Add(Task.Run(async () =>
         {
             await GetAffiliateCriteria(new GetBenchmarkCriteriaListRequest
@@ -20,7 +18,6 @@ public async Task<IActionResult> LoadTestBoth([FromBody] LoadTestBothRequest req
             });
         }));
 
-        // Run Affiliate Benchmark Comparison
         tasks.Add(Task.Run(async () =>
         {
             await GetAffiliateBenchmarkComparision(new AffiliateBenchmarkComparisionRequest
@@ -36,32 +33,13 @@ public async Task<IActionResult> LoadTestBoth([FromBody] LoadTestBothRequest req
     await Task.WhenAll(tasks);
     stopwatch.Stop();
 
-    // Response summary
     return Ok(new
     {
-        TotalRequestsExecuted = request.NoOfRequests * 2,
         TotalTimeMs = stopwatch.ElapsedMilliseconds,
+        TotalTimeMinutes = Math.Round(stopwatch.ElapsedMilliseconds / 60000.0, 3),
         AvgTimePerRequestMs = stopwatch.ElapsedMilliseconds / (request.NoOfRequests * 2),
         StartDate = request.StartDate,
         EndDate = request.EndDate,
         ExecutedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
     });
 }
-public class LoadTestBothRequest
-{
-    public int NoOfRequests { get; set; } = 10;
-    public string? Page { get; set; }
-    public string? AffiliateId { get; set; }
-    public string? KpiCode { get; set; }
-    public string? StartDate { get; set; }
-    public string? EndDate { get; set; }
-}
-{
-  "NoOfRequests": 5,
-  "Page": "1",
-  "AffiliateId": "AFF123",
-  "KpiCode": "KPI001",
-  "StartDate": "2025-01-01",
-  "EndDate": "2025-10-01"
-}
-
