@@ -1,60 +1,92 @@
-[HttpPost("LoadTestBoth")]
-public async Task<IActionResult> LoadTestBoth([FromBody] LoadTestBothRequest request)
+[ApiController]
+[Route("api/[controller]")]
+public class BenchmarkLoadTestController : ControllerBase
 {
-    if (request == null || request.NoOfRequests <= 0)
-        return BadRequest("Invalid request or NoOfRequests must be > 0");
+    private readonly IBenchMarkServices _benchMarkServices;
+    private readonly ILogger<BenchmarkLoadTestController> _logger;
 
-    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-    int failedAffiliateCriteria = 0;
-    int failedBenchmarkComparison = 0;
-    int successAffiliateCriteria = 0;
-    int successBenchmarkComparison = 0;
-
-    var errorLogs = new List<string>();
-    var tasks = new List<Task>();
-
-    for (int i = 0; i < request.NoOfRequests; i++)
+    public BenchmarkLoadTestController(IBenchMarkServices benchMarkServices, ILogger<BenchmarkLoadTestController> logger)
     {
-        // --- Test GetAffiliateCriteria ---
-        tasks.Add(Task.Run(async () =>
+        _benchMarkServices = benchMarkServices;
+        _logger = logger;
+    }
+
+    // ✅ 1️⃣ Load test for GetAffiliateCriteria
+    [HttpPost("LoadTestAffiliateCriteria")]
+    public async Task<IActionResult> LoadTestAffiliateCriteria([FromBody] LoadTestCriteriaRequest request)
+    {
+        if (request == null || request.NoOfRequests <= 0)
+            return BadRequest("Invalid request or NoOfRequests must be > 0");
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var successCount = 0;
+        var failureCount = 0;
+        var failures = new List<string>();
+
+        var tasks = Enumerable.Range(0, request.NoOfRequests).Select(async i =>
         {
             try
             {
-                var result = await GetAffiliateCriteria(new GetBenchmarkCriteriaListRequest
+                var result = await _benchMarkServices.GetAffiliateCriteria(new GetBenchmarkCriteriaListRequest
                 {
                     page = request.Page
                 });
 
-                if (result is OkObjectResult)
+                if (result == null)
                 {
-                    Interlocked.Increment(ref successAffiliateCriteria);
+                    Interlocked.Increment(ref failureCount);
+                    lock (failures)
+                        failures.Add($"Request #{i + 1} failed: NoContent (Criteria)");
                 }
                 else
                 {
-                    Interlocked.Increment(ref failedAffiliateCriteria);
-                    lock (errorLogs)
-                    {
-                        errorLogs.Add($"[Criteria] Request #{i + 1} returned non-OK: {result?.GetType().Name}");
-                    }
+                    Interlocked.Increment(ref successCount);
                 }
             }
             catch (Exception ex)
             {
-                Interlocked.Increment(ref failedAffiliateCriteria);
-                lock (errorLogs)
-                {
-                    errorLogs.Add($"[Criteria] Request #{i + 1} failed: {ex.Message}");
-                }
+                Interlocked.Increment(ref failureCount);
+                lock (failures)
+                    failures.Add($"Request #{i + 1} failed with exception: {ex.Message}");
+                _logger.LogWarning(ex, "AffiliateCriteria request #{RequestNo} failed", i + 1);
             }
-        }));
+        });
 
-        // --- Test GetAffiliateBenchmarkComparision ---
-        tasks.Add(Task.Run(async () =>
+        await Task.WhenAll(tasks);
+        stopwatch.Stop();
+
+        return Ok(new
+        {
+            API = "GetAffiliateCriteria",
+            request.NoOfRequests,
+            SuccessCount = successCount,
+            FailureCount = failureCount,
+            Failures = failures,
+            TotalTimeMs = stopwatch.ElapsedMilliseconds,
+            TotalTimeMinutes = Math.Round(stopwatch.ElapsedMilliseconds / 60000.0, 3),
+            AvgTimePerRequestMs = Math.Round(stopwatch.ElapsedMilliseconds / request.NoOfRequests, 2),
+            ExecutedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+        });
+    }
+
+
+    // ✅ 2️⃣ Load test for GetAffiliateBenchmarkComparision
+    [HttpPost("LoadTestAffiliateComparision")]
+    public async Task<IActionResult> LoadTestAffiliateComparision([FromBody] LoadTestComparisionRequest request)
+    {
+        if (request == null || request.NoOfRequests <= 0)
+            return BadRequest("Invalid request or NoOfRequests must be > 0");
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var successCount = 0;
+        var failureCount = 0;
+        var failures = new List<string>();
+
+        var tasks = Enumerable.Range(0, request.NoOfRequests).Select(async i =>
         {
             try
             {
-                var result = await GetAffiliateBenchmarkComparision(new AffiliateBenchmarkComparisionRequest
+                var result = await _benchMarkServices.GetAffiliateBenchmarkComparisionAsync(new AffiliateBenchmarkComparisionRequest
                 {
                     affiliateId = request.AffiliateId,
                     kpiCode = request.KpiCode,
@@ -62,55 +94,57 @@ public async Task<IActionResult> LoadTestBoth([FromBody] LoadTestBothRequest req
                     endDate = request.EndDate
                 });
 
-                if (result is OkObjectResult)
+                if (result == null)
                 {
-                    Interlocked.Increment(ref successBenchmarkComparison);
+                    Interlocked.Increment(ref failureCount);
+                    lock (failures)
+                        failures.Add($"Request #{i + 1} failed: NoContent (Comparision)");
                 }
                 else
                 {
-                    Interlocked.Increment(ref failedBenchmarkComparison);
-                    lock (errorLogs)
-                    {
-                        errorLogs.Add($"[Benchmark] Request #{i + 1} returned non-OK: {result?.GetType().Name}");
-                    }
+                    Interlocked.Increment(ref successCount);
                 }
             }
             catch (Exception ex)
             {
-                Interlocked.Increment(ref failedBenchmarkComparison);
-                lock (errorLogs)
-                {
-                    errorLogs.Add($"[Benchmark] Request #{i + 1} failed: {ex.Message}");
-                }
+                Interlocked.Increment(ref failureCount);
+                lock (failures)
+                    failures.Add($"Request #{i + 1} failed with exception: {ex.Message}");
+                _logger.LogWarning(ex, "AffiliateBenchmarkComparision request #{RequestNo} failed", i + 1);
             }
-        }));
+        });
+
+        await Task.WhenAll(tasks);
+        stopwatch.Stop();
+
+        return Ok(new
+        {
+            API = "GetAffiliateBenchmarkComparision",
+            request.NoOfRequests,
+            SuccessCount = successCount,
+            FailureCount = failureCount,
+            Failures = failures,
+            TotalTimeMs = stopwatch.ElapsedMilliseconds,
+            TotalTimeMinutes = Math.Round(stopwatch.ElapsedMilliseconds / 60000.0, 3),
+            AvgTimePerRequestMs = Math.Round(stopwatch.ElapsedMilliseconds / request.NoOfRequests, 2),
+            ExecutedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+        });
     }
+}
 
-    await Task.WhenAll(tasks);
-    stopwatch.Stop();
 
-    var totalRequests = request.NoOfRequests * 2;
-    var totalFailures = failedAffiliateCriteria + failedBenchmarkComparison;
-    var totalSuccess = successAffiliateCriteria + successBenchmarkComparison;
+// ✅ Request Models
+public class LoadTestCriteriaRequest
+{
+    public string? Page { get; set; }
+    public int NoOfRequests { get; set; }
+}
 
-    var warningMessage = totalFailures > 0
-        ? $"⚠️ WARNING: {totalFailures} requests failed — {failedAffiliateCriteria} (AffiliateCriteria), {failedBenchmarkComparison} (BenchmarkComparision)"
-        : "✅ All requests executed successfully.";
-
-    return Ok(new
-    {
-        TotalRequests = totalRequests,
-        SuccessfulRequests = totalSuccess,
-        FailedRequests = totalFailures,
-        FailedAffiliateCriteria = failedAffiliateCriteria,
-        FailedBenchmarkComparision = failedBenchmarkComparison,
-        Warning = warningMessage,
-        TotalTimeMs = stopwatch.ElapsedMilliseconds,
-        TotalTimeMinutes = Math.Round(stopwatch.ElapsedMilliseconds / 60000.0, 3),
-        AvgTimePerRequestMs = Math.Round((double)stopwatch.ElapsedMilliseconds / totalRequests, 3),
-        StartDate = request.StartDate,
-        EndDate = request.EndDate,
-        ExecutedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-        ErrorLogs = errorLogs
-    });
+public class LoadTestComparisionRequest
+{
+    public string? AffiliateId { get; set; }
+    public string? KpiCode { get; set; }
+    public string? StartDate { get; set; }
+    public string? EndDate { get; set; }
+    public int NoOfRequests { get; set; }
 }
