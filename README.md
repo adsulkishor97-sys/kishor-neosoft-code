@@ -1,23 +1,49 @@
- public async Task<IActionResult> GetAffiliateCriteria(GetBenchmarkCriteriaListRequest request)
- {
-     var affiliatecriteriaListResult = await _benchMarkServices.GetAffiliateCriteria(request);
-     if (affiliatecriteriaListResult == null) return NoContent();
-     else return Ok(affiliatecriteriaListResult);
- }
- public async Task<IActionResult> GetAffiliateBenchmarkComparision(AffiliateBenchmarkComparisionRequest affiliateBenchmarkComparisionRequest)
+[HttpPost("LoadTestBoth")]
+public async Task<IActionResult> LoadTestBoth([FromBody] LoadTestBothRequest request)
 {
-    var affiliateComparisionResult = await _benchMarkServices.GetAffiliateBenchmarkComparisionAsync(affiliateBenchmarkComparisionRequest);
-    if (affiliateComparisionResult == null) return NoContent();
-    else return Ok(affiliateComparisionResult);
-}
- public class AffiliateBenchmarkComparisionRequest
- {
-     public string? affiliateId { get; set; }
-     public string? kpiCode { get; set; }
-     public string? startDate { get; set; }
-     public string? endDate { get; set; }       
- }
- public class GetBenchmarkCriteriaListRequest
-{
-    public string? page { get; set; }
+    if (request == null || request.NoOfRequests <= 0)
+        return BadRequest("Invalid request or NoOfRequests must be > 0");
+
+    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+    // Run both APIs in parallel for N requests
+    var tasks = new List<Task>();
+
+    for (int i = 0; i < request.NoOfRequests; i++)
+    {
+        // Run Affiliate Criteria
+        tasks.Add(Task.Run(async () =>
+        {
+            await GetAffiliateCriteria(new GetBenchmarkCriteriaListRequest
+            {
+                page = request.Page
+            });
+        }));
+
+        // Run Affiliate Benchmark Comparison
+        tasks.Add(Task.Run(async () =>
+        {
+            await GetAffiliateBenchmarkComparision(new AffiliateBenchmarkComparisionRequest
+            {
+                affiliateId = request.AffiliateId,
+                kpiCode = request.KpiCode,
+                startDate = request.StartDate,
+                endDate = request.EndDate
+            });
+        }));
+    }
+
+    await Task.WhenAll(tasks);
+    stopwatch.Stop();
+
+    // Response summary
+    return Ok(new
+    {
+        TotalRequestsExecuted = request.NoOfRequests * 2,
+        TotalTimeMs = stopwatch.ElapsedMilliseconds,
+        AvgTimePerRequestMs = stopwatch.ElapsedMilliseconds / (request.NoOfRequests * 2),
+        StartDate = request.StartDate,
+        EndDate = request.EndDate,
+        ExecutedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+    });
 }
