@@ -76,3 +76,21 @@ namespace YourNamespace.Controllers
         }
     }
 }
+
+ public class BenchmarkLoadTestRequest
+    {
+        /// <summary>
+        /// Number of concurrent requests to send (per type: SQL + Big Data)
+        /// </summary>
+        public int ConcurrentRequests { get; set; } = 10;
+
+        /// <summary>
+        /// SQL Server request details
+        /// </summary>
+        public GetBenchmarkCriteriaListRequest SqlRequest { get; set; } = new();
+
+        /// <summary>
+        /// Big Data Server request details
+        /// </summary>
+        public AffiliateBenchmarkComparisionRequest BigDataRequest { get; set; } = new();
+    }
