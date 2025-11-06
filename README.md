@@ -47,3 +47,12 @@ public async Task<IActionResult> LoadTestBoth([FromBody] LoadTestBothRequest req
         ExecutedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
     });
 }
+public class LoadTestBothRequest
+{
+    public int NoOfRequests { get; set; } = 10;
+    public string? Page { get; set; }
+    public string? AffiliateId { get; set; }
+    public string? KpiCode { get; set; }
+    public string? StartDate { get; set; }
+    public string? EndDate { get; set; }
+}
