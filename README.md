@@ -1,78 +1,146 @@
-public async Task<GetHierarchyInfoResponse?> GetHierarchyInfoAsync(GetHierarchyInfoRequest request, string sqlAffiliateRequest)
+[Fact]
+public async Task GetHierarchyInfoAsync_ShouldReturnMappedResponse_WhenValidRequest()
 {
-    var emptyResponse = new GetHierarchyInfoResponse();
-    string plantRequest = string.Empty;
-    List<int> tokenplantIds=new List<int>();
-    if (request.plantId != null)
+    // Arrange
+    var fixture = new Fixture();
+
+    var request = fixture.Build<GetHierarchyInfoRequest>()
+        .With(x => x.affiliateId, 1)
+        .With(x => x.plantId, 10)
+        .Create();
+
+    var sqlAffiliateRequest = "1";
+
+    var hierarchySqlResponse = new List<GetHierarchyInfoSqlDBResponse>
     {
-        plantRequest = Convert.ToString(request.plantId.Value);
-    }
-    if (sqlAffiliateRequest == null)
+        new GetHierarchyInfoSqlDBResponse
+        {
+            affiliateCount = 5,
+            assetClassCount = 4,
+            plantCount = 3,
+            productCount = 2,
+            overAllAsset = 20,
+            criticalAsset = 5
+        }
+    };
+
+    var hierarchyPlants = new List<HierarchyPlantResponse>
     {
-        return new GetHierarchyInfoResponse();
-    }
-    var httpContext = _httpContextAccessor.HttpContext;
-    var user = httpContext!.User;
-    var isValidAffiliate = CheckAffiliateValidation(request.affiliateId?.ToString() ?? "");
-    var isValidPlant = CheckPlantValidation(request.plantId?.ToString() ?? "");
-    string tokenplantIdList = "";
-    await ValidData(request, isValidAffiliate, isValidPlant, user, emptyResponse);
+        new HierarchyPlantResponse
+        {
+            plantId = 10,
+            affiliateId = 1
+        }
+    };
 
-    var lstPlants = await _assetRepository.GetCaseHierarchyAsync(Convert.ToInt32(request.affiliateId));
-    bool plantFlag = true;
-    string formateaffiliateIds = "";
-    if (user.IsInRole(PageConstants.ADMIN) || user.IsInRole(PageConstants.CORPORATE) || (user.IsInRole(PageConstants.AFFILIATE) && isValidAffiliate))
+    // Mock HttpContext user
+    var claims = new List<Claim>
     {
-        var affiliateID = request.affiliateId.ToString() ?? "";
-        var affiliateIds = affiliateID!.Split(',').Select(id => id.Trim()).Where(id => !string.IsNullOrEmpty(id)).ToList();
-        formateaffiliateIds = string.Join(",", affiliateIds);
-        plantFlag = false;
-    }
-    else
+        new Claim(ClaimTypes.Role, PageConstants.ADMIN)
+    };
+
+    var identity = new ClaimsIdentity(claims, "TestAuthType");
+    var claimsPrincipal = new ClaimsPrincipal(identity);
+
+    var httpContext = new DefaultHttpContext
     {
-        tokenplantIdList = string.Join(',', lstPlants.Where(a => tokenplantIds.Contains(a.plantId!)).Select(a => a.plantId).ToList());
-        formateaffiliateIds = string.Join(',', lstPlants.Where(a => tokenplantIds.Contains(a.plantId!)).Select(a => a.affiliateId).ToList());
-        plantFlag = true;
-    }
+        User = claimsPrincipal
+    };
 
+    _mockHttpContextAccessor.Setup(x => x.HttpContext).Returns(httpContext);
 
+    // Mock repositories
+    _mockAssetRepository
+        .Setup(x => x.GetCaseHierarchyAsync(It.IsAny<int>()))
+        .ReturnsAsync(hierarchyPlants);
 
-    if (formateaffiliateIds != null && formateaffiliateIds.Length > 0)
-    {
-        var getAffiliateCodeList = GetAffiliateCodeList(request.affiliateId);
+    _mockConfigRepository
+        .Setup(x => x.GetHierarchyInfoFromSqlDBAsync(It.IsAny<string>(), It.IsAny<string>()))
+        .ReturnsAsync(hierarchySqlResponse);
 
-        sqlAffiliateRequest = $"{string.Join(",", getAffiliateCodeList.Select(n => $"{n}"))}";
-    }
-    string? requestedPlant = CheckValidatePlant(request, plantRequest, plantFlag, tokenplantIdList);
-    
-List<GetHierarchyInfoSqlDBResponse> getHierarchyInfoSqlDBResponse = await _configRepository.GetHierarchyInfoFromSqlDBAsync(request.page!, requestedPlant != null ? requestedPlant : sqlAffiliateRequest);
+    // Act
+    var result = await _service.GetHierarchyInfoAsync(request, sqlAffiliateRequest);
 
-var finalResponse = new GetHierarchyInfoResponse
-{
-    affiliates = getHierarchyInfoSqlDBResponse.FirstOrDefault()!.affiliateCount,
-    assetClass = getHierarchyInfoSqlDBResponse.FirstOrDefault()!.assetClassCount,
-    plants = getHierarchyInfoSqlDBResponse.FirstOrDefault()!.plantCount,
-    product = getHierarchyInfoSqlDBResponse.FirstOrDefault()!.productCount,
-    assets = getHierarchyInfoSqlDBResponse.FirstOrDefault()!.overAllAsset,
-    criticalAssets = getHierarchyInfoSqlDBResponse.FirstOrDefault()!.criticalAsset,
-};
-    return finalResponse;
+    // Assert
+    Assert.NotNull(result);
+    Assert.Equal(5, result.affiliates);
+    Assert.Equal(4, result.assetClass);
+    Assert.Equal(3, result.plants);
+    Assert.Equal(2, result.product);
+    Assert.Equal(20, result.assets);
+    Assert.Equal(5, result.criticalAssets);
 }
+[Fact]
+public async Task GetHierarchyInfoAsync_ShouldReturnEmptyResponse_WhenSqlAffiliateRequestIsNull()
+{
+    var fixture = new Fixture();
+    var request = fixture.Create<GetHierarchyInfoRequest>();
 
- [Fact]
+    var result = await _service.GetHierarchyInfoAsync(request, null);
 
- public async Task GetHierarchyInfoAsync_ShouldReturnMappedResponse_WhenPlantIdIsProvided()
- {
-     // Arrange
-     var fixture = new Fixture();
-     var request = fixture.Create<GetHierarchyInfoRequest>();            
-     string sqlAffiliateRequest = It.IsAny<string>();
+    Assert.NotNull(result);
+    Assert.IsType<GetHierarchyInfoResponse>(result);
+}
+[Fact]
+public async Task GetHierarchyInfoAsync_ShouldWork_WhenPlantIdIsNull()
+{
+    var fixture = new Fixture();
 
+    var request = fixture.Build<GetHierarchyInfoRequest>()
+        .With(x => x.plantId, (int?)null)
+        .Create();
 
-     // Act
-     var result = await _mockconfigServices.GetHierarchyInfoAsync(request, sqlAffiliateRequest);
+    var sqlAffiliateRequest = "1";
 
-     // Assert
-     Assert.NotNull(result);
-     Assert.IsType<GetHierarchyInfoResponse>(result);
- }
+    _mockAssetRepository
+        .Setup(x => x.GetCaseHierarchyAsync(It.IsAny<int>()))
+        .ReturnsAsync(new List<HierarchyPlantResponse>());
+
+    _mockConfigRepository
+        .Setup(x => x.GetHierarchyInfoFromSqlDBAsync(It.IsAny<string>(), It.IsAny<string>()))
+        .ReturnsAsync(new List<GetHierarchyInfoSqlDBResponse>
+        {
+            new GetHierarchyInfoSqlDBResponse()
+        });
+
+    var result = await _service.GetHierarchyInfoAsync(request, sqlAffiliateRequest);
+
+    Assert.NotNull(result);
+}
+[Fact]
+public async Task GetHierarchyInfoAsync_ShouldHandleAffiliateRole()
+{
+    var fixture = new Fixture();
+
+    var request = fixture.Create<GetHierarchyInfoRequest>();
+
+    var claims = new List<Claim>
+    {
+        new Claim(ClaimTypes.Role, PageConstants.AFFILIATE)
+    };
+
+    var identity = new ClaimsIdentity(claims, "TestAuthType");
+    var claimsPrincipal = new ClaimsPrincipal(identity);
+
+    var httpContext = new DefaultHttpContext
+    {
+        User = claimsPrincipal
+    };
+
+    _mockHttpContextAccessor.Setup(x => x.HttpContext).Returns(httpContext);
+
+    _mockAssetRepository
+        .Setup(x => x.GetCaseHierarchyAsync(It.IsAny<int>()))
+        .ReturnsAsync(new List<HierarchyPlantResponse>());
+
+    _mockConfigRepository
+        .Setup(x => x.GetHierarchyInfoFromSqlDBAsync(It.IsAny<string>(), It.IsAny<string>()))
+        .ReturnsAsync(new List<GetHierarchyInfoSqlDBResponse>
+        {
+            new GetHierarchyInfoSqlDBResponse()
+        });
+
+    var result = await _service.GetHierarchyInfoAsync(request, "1");
+
+    Assert.NotNull(result);
+}
