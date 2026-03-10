@@ -1,6 +1,8 @@
-public async Task<List<AssetGroupedData>> GetAffDistFinalOverallNumAssetResult(List<KpiNumeratorDenominatorAffiliateDistribution> overAllNum, string category, string kpiCode)
+public async Task<List<AssetGroupedData>> GetAffDistFinalOverallNumAssetResult(
+    List<KpiNumeratorDenominatorAffiliateDistribution> overAllNum,
+    string category,
+    string kpiCode)
 {
-    dynamic finalResult;
     var allplants = await _currentRepository.GetPlantLists();
 
     var getaffiliatenamelist = (from r in overAllNum
@@ -16,113 +18,55 @@ public async Task<List<AssetGroupedData>> GetAffDistFinalOverallNumAssetResult(L
                                     r.tidnr,
                                     r.pltxt,
                                     r.plantid
-                                }
-                      ).ToList();
+                                }).ToList();
+
     var sumOnlyKpis = new HashSet<string>() { "166" };
     bool isSumOnly = sumOnlyKpis.Contains(kpiCode);
-    decimal? overallNume = null;
-    if (category == "U")
-    {
-        finalResult = getaffiliatenamelist.GroupBy(x => new { x.kpiid, x.pltxt }).//sum up the multiple affiliate numerator and denominator and get the actual value.
-           Select(g => 
 
-           {
-               bool hasValue = g.Any(x => x.overallNumerator != null);
-               if (hasValue)
-               {
-                   if (isSumOnly)
-                   {
-                       overallNume = g.Sum(x => x.overallNumerator);
-                   }
-                   else
-                   {
-                       overallNume = g.Average(x => x.overallNumerator);
-                   }
-               }
-               return new KpiNumDenAffiliateDistributionResult
-               {
-                   kpiid = g.Key.kpiid,
-                   overallNum = overallNume,
-                   plant = g.Select(x => x.plantid).FirstOrDefault(),
-                   sapId = g.Select(x => x.sap_id).FirstOrDefault(),
-                   template = g.Select(x => x.template).FirstOrDefault(),
-                   tidnr = g.Select(x => x.tidnr).FirstOrDefault(),
-                   pltxt = g.Select(x => x.pltxt).FirstOrDefault(),
-               };
-           }).OrderBy(x => x.kpiid).ThenBy(x => x.plantname).ToList();
-    }
-    else if (category == "AC")
+    Func<dynamic, object> groupSelector = category switch
     {
-        finalResult = getaffiliatenamelist.GroupBy(x => new { x.kpiid, x.template }).//sum up the multiple affiliate numerator and denominator and get the actual value.
-           Select(g => 
+        "U" => x => new { x.kpiid, x.pltxt },
+        "AC" => x => new { x.kpiid, x.template },
+        _ => x => new { x.kpiid, x.tidnr }
+    };
 
-           {
-               bool hasValue = g.Any(x => x.overallNumerator != null);
-               if (hasValue)
-               {
-                   if (isSumOnly)
-                   {
-                       overallNume = g.Sum(x => x.overallNumerator);
-                   }
-                   else
-                   {
-                       overallNume = g.Average(x => x.overallNumerator);
-                   }
-               }
-               return new KpiNumDenAffiliateDistributionResult
-               {
-                   kpiid = g.Key.kpiid,
-                   overallNum = overallNume,
-                   plant = g.Select(x => x.plantid).FirstOrDefault(),
-                   sapId = g.Select(x => x.sap_id).FirstOrDefault(),
-                   template = g.Select(x => x.template).FirstOrDefault(),
-                   tidnr = g.Select(x => x.tidnr).FirstOrDefault(),
-                   pltxt = g.Select(x => x.pltxt).FirstOrDefault(),
-               };
-           }).OrderBy(x => x.kpiid).ThenBy(x => x.plantname).ToList();
-    }
-    else
+    var finalResult = getaffiliatenamelist
+        .GroupBy(groupSelector)
+        .Select(g =>
+        {
+            decimal? overallNume = null;
+
+            if (g.Any(x => x.overallNumerator != null))
+            {
+                overallNume = isSumOnly
+                    ? g.Sum(x => x.overallNumerator)
+                    : g.Average(x => x.overallNumerator);
+            }
+
+            var first = g.First();
+
+            return new KpiNumDenAffiliateDistributionResult
+            {
+                kpiid = first.kpiid,
+                overallNum = overallNume,
+                plant = first.plantid,
+                sapId = first.sap_id,
+                template = first.template,
+                tidnr = first.tidnr,
+                pltxt = first.pltxt
+            };
+        })
+        .OrderBy(x => x.kpiid)
+        .ThenBy(x => x.plantname)
+        .ToList();
+
+    return finalResult.Select(item => new AssetGroupedData
     {
-        finalResult = getaffiliatenamelist.GroupBy(x => new { x.kpiid, x.tidnr }).//sum up the multiple affiliate numerator and denominator and get the actual value.
-           Select(g => 
-
-           {
-               bool hasValue = g.Any(x => x.overallNumerator != null);
-               if (hasValue)
-               {
-                   if (isSumOnly)
-                   {
-                       overallNume = g.Sum(x => x.overallNumerator);
-                   }
-                   else
-                   {
-                       overallNume = g.Average(x => x.overallNumerator);
-                   }
-               }
-               return new KpiNumDenAffiliateDistributionResult
-               {
-                   kpiid = g.Key.kpiid,
-                   overallNum = overallNume,
-                   plant = g.Select(x => x.plantid).FirstOrDefault(),
-                   sapId = g.Select(x => x.sap_id).FirstOrDefault(),
-                   template = g.Select(x => x.template).FirstOrDefault(),
-                   tidnr = g.Select(x => x.tidnr).FirstOrDefault(),
-                   pltxt = g.Select(x => x.pltxt).FirstOrDefault(),
-               };
-           }).OrderBy(x => x.kpiid).ThenBy(x => x.plantname).ToList();
-    }
-
-    List<AssetGroupedData> lstResult = new List<AssetGroupedData>();
-    foreach (var item in finalResult)
-    {
-        AssetGroupedData assetDistResult = new AssetGroupedData();
-        assetDistResult.plantId = Convert.ToString(item.plant);
-        assetDistResult.overall = item.overallNum;
-        assetDistResult.sapId = item.sapId;
-        assetDistResult.template = item.template;
-        assetDistResult.tidnr = item.tidnr;
-        assetDistResult.pltxt = item.pltxt;
-        lstResult.Add(assetDistResult);
-    }
-    return lstResult;
+        plantId = Convert.ToString(item.plant),
+        overall = item.overallNum,
+        sapId = item.sapId,
+        template = item.template,
+        tidnr = item.tidnr,
+        pltxt = item.pltxt
+    }).ToList();
 }
