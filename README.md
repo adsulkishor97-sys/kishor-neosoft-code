@@ -1,44 +1,35 @@
-public class KpiDbResponse
+public class AssetFailureResponse
 {
-    public int rollingPeriod { get; set; }
-    public int kpiCode { get; set; }
-    public string kpiName { get; set; }
     public string subCategory { get; set; }
-    public string? failureMethodology { get; set; }
-    public string monthKey { get; set; }
-    public double overallActual { get; set; }
+    public string? failure_methodology { get; set; }
+    public List<FailureResponse> failures { get; set; }
+    public List<KpiResponse> kpis { get; set; }
+}
+
+public class FailureResponse
+{
+    public string month { get; set; }
+    public string label { get; set; }
+    public int count { get; set; }
+}
+
+public class KpiResponse
+{
+    public string kpi_code { get; set; }
+    public string kpi_name { get; set; }
     public int direction { get; set; }
+    public List<RollingAverageResponse> rolling_averages { get; set; }
+}
+
+public class RollingAverageResponse
+{
+    public int period_months { get; set; }
+    public List<KpiDataResponse> data { get; set; }
+}
+
+public class KpiDataResponse
+{
+    public string month { get; set; }
+    public double value { get; set; }
     public long timeEpoch { get; set; }
 }
-public class FailureDbResponse
-{
-    public string monthKey { get; set; }
-    public int failureCount { get; set; }
-}
-var groupedKpis = sqlData
-    .GroupBy(x => new
-    {
-        x.kpiCode,
-        x.kpiName,
-        x.direction
-    })
-    .Select(kpiGroup => new KpiResponse
-    {
-        kpi_code = kpiGroup.Key.kpiCode.ToString(),
-        kpi_name = kpiGroup.Key.kpiName,
-        direction = kpiGroup.Key.direction,
-
-        rolling_averages = kpiGroup
-            .GroupBy(x => x.rollingPeriod)
-            .Select(periodGroup => new RollingAverageResponse
-            {
-                period_months = periodGroup.Key,
-
-                data = periodGroup.Select(x => new KpiDataResponse
-                {
-                    month = x.monthKey,
-                    value = x.overallActual,
-                    timeEpoch = x.timeEpoch
-                }).ToList()
-            }).ToList()
-    }).ToList();
